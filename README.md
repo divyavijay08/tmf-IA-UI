@@ -1,6 +1,6 @@
 # Team Alpha — Assurance UI
 
-React + TypeScript evidence and observability console for the Trustworthy AI and Data hackathon. Built with Material UI and MUI X Charts.
+React + TypeScript evidence and observability console for the Trustworthy AI and Data hackathon
 
 ## Run locally
 
