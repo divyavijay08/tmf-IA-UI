@@ -4,8 +4,8 @@ import {traceFor,type Span} from './traceData';
 import {exportJson} from './evidenceApi';
 import type {Run} from './evidence';
 const colors={agent:'#4285f4',model:'#a78bfa',tool:'#34a853',evaluation:'#fbbc05',handoff:'#8ab4f8'};
-export function Observability({runs,onEvidence}:{runs:Run[];onEvidence:(r:Run)=>void}){
- const [runId,setRunId]=useState('alpha-002'),[spanId,setSpanId]=useState('tool-3'),[filter,setFilter]=useState('all'),[tab,setTab]=useState(0);
+export function Observability({runs,onEvidence,initialRun='alpha-002'}:{initialRun?:string;runs:Run[];onEvidence:(r:Run)=>void}){
+ const [runId,setRunId]=useState(initialRun),[spanId,setSpanId]=useState('tool-3'),[filter,setFilter]=useState('all'),[tab,setTab]=useState(0);
  const run=runs.find(r=>r.id===runId)??runs[0];if(!run)return <Typography>Waiting for run data…</Typography>;
  const trace=traceFor(run.id),selected=trace.spans.find(s=>s.id===spanId)??trace.spans[0];const visible=trace.spans.filter(s=>filter==='all'||s.kind===filter);
  const modelCalls=trace.spans.filter(s=>s.kind==='model');const tokens=modelCalls.reduce((a,s)=>a+(s.tokens?.input??0)+(s.tokens?.output??0),0);
