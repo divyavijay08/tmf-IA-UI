@@ -1,1 +1,26 @@
-{"name":"alpha-assurance-console","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"tsc --noEmit && vite build","test":"node --experimental-strip-types --test src/evidence.test.ts"},"dependencies":{"@emotion/react":"^11.14.0","@emotion/styled":"^11.14.0","@mui/icons-material":"^7.3.0","@mui/material":"^7.3.0","@mui/x-charts":"^8.29.3","react":"^19.1.0","react-dom":"^19.1.0"},"devDependencies":{"@types/react":"^19.1.0","@types/react-dom":"^19.1.0","typescript":"^5.9.0","vite":"^7.1.0"}}
+{
+  "name": "alpha-assurance-console",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/icons-material": "^7.3.0",
+    "@mui/material": "^7.3.0",
+    "@mui/x-charts": "^8.29.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}

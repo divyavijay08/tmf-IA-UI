@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {parseCloudCapture,spansForRun,modelUsage,safeCloudUrl} from './cloudwatchData.ts';
+import {parseAssurance} from './assuranceData.ts';
+const capture=parseCloudCapture(JSON.parse(readFileSync(new URL('../public/data/cloudwatch-capture.json',import.meta.url),'utf8')));
+const data=parseAssurance(JSON.parse(readFileSync(new URL('../public/data/assurance-v2.json',import.meta.url),'utf8')));
+test('CloudWatch matches actual traces and counts model spans without parent duplication',()=>{const r=data.runs.find(r=>r.id==='c716-pass-03')!;const spans=spansForRun(capture,r);assert.equal(spans.length,67);assert.equal(modelUsage(spans).tokens,15491);assert.equal(new Set(spans.map(s=>s.service)).size,3);assert.equal(modelUsage([]).tokens,null)});
+test('similar session names and timing cannot establish a run join',()=>{const r=data.runs.find(r=>r.id==='c716-pass-03')!;assert.equal(spansForRun(capture,{...r,events:[]}).length,0)});
+test('repeated span IDs are deduplicated and invalid measurements rejected',()=>{assert.equal(parseCloudCapture({...capture,spans:[...capture.spans,capture.spans[0]]}).spans.length,capture.spans.length);assert.throws(()=>parseCloudCapture({...capture,spans:[{...capture.spans[0],inputTokens:-1}]}));assert.throws(()=>parseCloudCapture({...capture,spans:[{...capture.spans[0],traceId:'guess'}]}))});
+test('capture excludes prompt bodies and tool payloads',()=>{for(const s of capture.spans){assert.equal('events' in s,false);assert.equal('attributes' in s,false)}for(const l of capture.logs)assert.equal('message' in l,false);assert.equal(safeCloudUrl('javascript:alert(1)'),undefined);assert.equal(safeCloudUrl('https://example.com'),undefined)});
