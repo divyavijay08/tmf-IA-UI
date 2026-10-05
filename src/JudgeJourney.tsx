@@ -54,7 +54,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
     const r=await fetch('api/executions',{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('Message status is unavailable');
     const nextJobs=(await r.json()).executions as Job[];if(cancelled)return;setJobs(nextJobs);
     const selected=nextJobs.find(j=>j.id===jobId);
-    if(selected?.traceId){
+    if(selected?.traceId&&!isActive(selected.state)){
      const from=new Date(Date.parse(selected.createdAt)-60_000),to=new Date(selected.finishedAt?Date.parse(selected.finishedAt)+60_000:Date.now());
      try{const response=await fetch('api/telemetry?'+new URLSearchParams({from:from.toISOString(),to:to.toISOString()}),{cache:'no-store',signal:controller.signal});
      if(response.ok){const capture=parseCloudCapture(await response.json());if(!cancelled)setSpans(capture.spans.filter(s=>s.traceId===selected.traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime)))}
@@ -96,7 +96,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
      <div className="chat-user-message">{job.userMessage||`Investigate ${config?.scenarios.find(s=>s.id===job.scenario)?.title||job.scenario}.`}</div>
      <div className="chat-agent-heading"><ChatBubbleOutlineRounded aria-hidden="true"/><b>Alpha assistant</b></div>
      {job.answer&&<div className="chat-answer">{job.answer}</div>}
-     {isActive(job.state)?<div className="chat-processing"><ThinkingState/><span>Gathering evidence · {job.state}</span></div>:!job.answer&&<p>{job.kind==='chat'?'No agent answer was returned.':'Saved scenario execution. No chat message was sent for this run.'}</p>}
+     {isActive(job.state)?<div className="chat-processing">{!job.answer&&<ThinkingState/>}<span>{job.answer?'Collecting trace evidence':'Customer service agent is responding'}</span></div>:!job.answer&&<p>{job.kind==='chat'?'No agent answer was returned.':'Saved scenario execution. No chat message was sent for this run.'}</p>}
      <details className="chat-activity" open={isActive(job.state)}><summary>Agent activity <span>{toolSpans.length} recorded tool calls</span></summary><div className="journey-events">{toolSpans.length?toolSpans.map(s=><AgentEvent key={s.traceId+s.spanId} span={s}/>):<p>No tool spans loaded for this conversation yet.</p>}</div></details>
      {job.message&&<p className="chat-run-message">{job.message}</p>}
      {job.traceId&&<div className="chat-evidence-links"><Button onClick={()=>setTab('Trace & controls')}>Explore trace & controls</Button><Button component="a" href={CLOUDWATCH.replace(REFERENCE_TRACE,job.traceId)} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewOutlined/>}>CloudWatch</Button></div>}

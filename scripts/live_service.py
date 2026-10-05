@@ -72,18 +72,24 @@ class Runtime:
     try:
      response=json.loads(response_path.read_text());job['answer']=response.get('answer','');job['disposition']=response.get('disposition');job['agentHttpStatus']=response.get('http_status')
     except (OSError,ValueError):job['answer']=''
-   job['exitCode']=result.returncode;job.update(state='collecting');save(path,job)
+   job['exitCode']=result.returncode;job.update(state='collecting')
+   if job.get('kind')=='chat':
+    answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
+    job.update(state='completed' if answered else 'failed',finishedAt=now(),message='Customer service agent replied.' if answered else 'Customer service agent did not return a successful answer.',evidenceState='collecting')
+   save(path,job)
    # The configured collector is a fixed administrator-owned argv, never browser input.
    if config.get('collector'):
     command=[arg.replace('{runId}',job['runId']) for arg in config['collector']]
     with (directory/'collector.log').open('w') as log:
      collected=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=600,env=dict(os.environ,ALPHA_EVIDENCE=config['evidence'],ALPHA_REGISTER=str(directory/'register')))
-    job['collectionExitCode']=collected.returncode
+    job['collectionExitCode']=collected.returncode;job['evidenceState']='completed' if collected.returncode==0 else 'failed'
    job.update(state='completed' if result.returncode==0 and job.get('collectionExitCode',1)==0 else 'failed',message='Process outcomes recorded. Control results and business completion require evidence.',finishedAt=now())
    if job.get('kind')=='chat':
     answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
     job.update(state='completed' if answered else 'failed',message=('Customer service agent replied.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Customer service agent did not return a successful answer.')
-  except subprocess.TimeoutExpired:job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
+  except subprocess.TimeoutExpired:
+   if job.get('kind')=='chat' and job.get('finishedAt'):job.update(evidenceState='failed',message='Agent response retained. Evidence collection timed out.')
+   else:job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
   except Exception:job.update(state='failed',message='Runner or collector failed. Inspect server-side execution logs.',finishedAt=now())
   save(path,job)
 
