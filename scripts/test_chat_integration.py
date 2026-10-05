@@ -37,10 +37,10 @@ class MessageIntegrationTests(unittest.TestCase):
   job=self.create();directory=self.root/'jobs'/job['id']
   def run(command,**kwargs):
    self.assertTrue(command[1].endswith('chat_runner.py'))
-   self.assertEqual(command[-2:],['--roles','customer'])
+   self.assertNotIn('--roles',command)
    self.assertEqual(read(command[2])['message'],job['userMessage'])
    answer_path=self.root/'evidence'/'runs'/job['runId'];answer_path.mkdir(parents=True)
-   (answer_path/'console-alpha-c716-customer.txt').write_text(json.dumps({'answer':'Actual response about ABC-987','http_status':200,'disposition':'undetermined'}))
+   (answer_path/'chat-answer.json').write_text(json.dumps({'answer':'Actual response about ABC-987','http_status':200,'disposition':'undetermined'}))
    return SimpleNamespace(returncode=0)
   with patch('live_service.subprocess.run',side_effect=run):self.runtime.execute(directory,job)
   saved=read(directory/'job.json');self.assertEqual(saved['answer'],'Actual response about ABC-987');self.assertEqual(saved['state'],'completed')

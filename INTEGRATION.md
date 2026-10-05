@@ -34,10 +34,16 @@ Audit exports include the loaded assurance response, explicitly imported telemet
 
 Historical captures live in `tests/fixtures`; retired screens, sample adapters and their tests live in `archive/legacy-ui`. Neither directory is served as a public asset or imported by the active application. The ServiceNow panel provides browser links and an unavailable current-status message until a governance connector supplies evidence.
 
-## Customer messages
+## Customer messages and connected agent journey
 
-`POST /api/messages` accepts `message` (1–3000 characters), `idempotencyKey`, and an optional completed message `parentId`. It sends the exact initial message to the configured customer agent as `context.question`. Follow-ups include server-owned prior user/assistant turns. It does not select a fault scenario or automatically invoke IT/network agents. The isolated `chat_runner.py` context adapter reuses the governed runner's transport, timeouts, trace IDs, pinned thresholds and budget export, invoking only its customer role. It does not change deployed agent prompts or the scenario runner.
+`POST /api/messages` accepts the actual message, an idempotency key, and an optional completed parent message. The backend `chat_runner.py` invokes the existing governed runtime through `tools.control7.runner.invoke_runtime`; `agent_journey.py` defines the bounded handoff sequence:
 
-The persisted job contains the real agent `answer`, disposition and HTTP status; process exit alone is insufficient for a completed chat. History survives reloads. `GET /api/executions` remains a status/history endpoint, used while jobs are active; configuration loads once. Answers arrive when the agent returns (not a token stream). The UI shows only recorded tool spans. Legacy scenario runs are labelled as such.
+Customer intake → IT investigation → Network/digital twin → IT review → Network finalisation → Customer synthesis.
 
-Messages and answers are retained in the existing restricted job/evidence store to support conversation history. This is the existing shared workshop workspace, not a private per-user messaging service.
+Each stage receives the original message, server-owned conversation history and prior agent findings. The instrumented runtime reads `context.question`, so the backend includes the handoff evidence in that field as well as structured fields. No predefined scenario data is substituted. Existing proposal/negotiation/finalize contracts are used when a Network agent returns a pending proposal; otherwise review is performed as a governed analysis call. The digital twin remains the Network agent's existing tool, not an invented additional agent.
+
+All stages share one trace/run ID and have distinct invocation IDs. The runner records the participant plan before invocation, runtime sessions, returned transport attempts and per-stage responses. Identity mismatches, blocked or failed invocations and audit errors stop downstream stages. The existing runtime spend guard remains responsible for per-model budget enforcement. The runner exports the actual budget and retains the normal control collector; it does not synthesize control verdicts.
+
+The final chat answer comes only from the final Customer invocation. `GET /api/executions` returns recorded journey stages, findings and tool-call metadata as each invocation returns. This is stage-level progress, not model token streaming. The UI separately loads CloudWatch spans for the exact trace; telemetry ingestion can lag behind the answer. Status polling stops after execution and evidence collection settle. Follow-up turns retain prior user and final Customer responses.
+
+Messages and evidence are retained in the restricted server job/evidence store. This remains the shared workshop workspace, not a private per-user chat service.

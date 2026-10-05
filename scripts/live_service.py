@@ -25,7 +25,7 @@ class Runtime:
   result=[]
   for path in self.root.glob('*/job.json'):
    job=read(path);start=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner-start.json');finish=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner.json')
-   sessions=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'sessions.json') or [];job['invokedAgents']=[s.get('actor') for s in sessions if s.get('actor')];job['traceId']=start.get('trace_id');job['completedAgents']=len(finish.get('results',[]));job['workflowCompletedAt']=finish.get('completed_at');result.append(job)
+   sessions=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'sessions.json') or [];job['invokedAgents']=[s.get('actor') for s in sessions if s.get('actor')];job['traceId']=start.get('trace_id');job['completedAgents']=len(finish.get('results',[]));job['workflowCompletedAt']=finish.get('completed_at');journey=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'journey.json');job['journey']=journey.get('stages',[]);job['journeyError']=journey.get('error');result.append(job)
   return sorted(result,key=lambda j:j['createdAt'],reverse=True)[:100]
  def chat(self,message,key,parent=None):
   if not isinstance(message,str) or not message.strip() or len(message)>3000:raise ValueError('Message must contain 1–3000 characters')
@@ -62,20 +62,20 @@ class Runtime:
   config=self.config;path=directory/'job.json'
   command=['python3','-m','tools.control7.runner',job['scenario'],'--data',str(directory/'data'),'--threshold',str(directory/'threshold'),'--register',str(directory/'register'),'--evidence',config['evidence'],'--run-id',job['runId'],'--actors',','.join(k+'='+v for k,v in config['actors'].items()),'--budget-export']
   if job.get('kind')=='chat':
-   command=['python3',str(Path(__file__).with_name('chat_runner.py')),str(directory/'chat-request.json')]+command[3:]+['--roles','customer']
+   command=['python3',str(Path(__file__).with_name('chat_runner.py')),str(directory/'chat-request.json')]+command[3:]
   job.update(state='running',startedAt=now());save(path,job)
   try:
    with (directory/'runner.log').open('w') as log:
     result=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=1800,env=dict(os.environ,PYTHONPATH=config['repository']))
    if job.get('kind')=='chat':
-    response_path=Path(config['evidence'])/'runs'/job['runId']/('console-'+config['actors']['customer']+'.txt')
+    response_path=Path(config['evidence'])/'runs'/job['runId']/'chat-answer.json'
     try:
      response=json.loads(response_path.read_text());job['answer']=response.get('answer','');job['disposition']=response.get('disposition');job['agentHttpStatus']=response.get('http_status')
     except (OSError,ValueError):job['answer']=''
    job['exitCode']=result.returncode;job.update(state='collecting')
    if job.get('kind')=='chat':
     answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
-    job.update(state='completed' if answered else 'failed',finishedAt=now(),message='Customer service agent replied.' if answered else 'Customer service agent did not return a successful answer.',evidenceState='collecting')
+    job.update(state='completed' if answered else 'failed',finishedAt=now(),message='Customer service combined the investigation results.' if answered else 'Investigation stopped before a final customer response. See the recorded stages.',evidenceState='collecting')
    save(path,job)
    # The configured collector is a fixed administrator-owned argv, never browser input.
    if config.get('collector'):
@@ -86,7 +86,7 @@ class Runtime:
    job.update(state='completed' if result.returncode==0 and job.get('collectionExitCode',1)==0 else 'failed',message='Process outcomes recorded. Control results and business completion require evidence.',finishedAt=now())
    if job.get('kind')=='chat':
     answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
-    job.update(state='completed' if answered else 'failed',message=('Customer service agent replied.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Customer service agent did not return a successful answer.')
+    job.update(state='completed' if answered else 'failed',message=('Customer service combined the investigation results.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Investigation stopped before a final customer response. See the recorded stages.')
   except subprocess.TimeoutExpired:
    if job.get('kind')=='chat' and job.get('finishedAt'):job.update(evidenceState='failed',message='Agent response retained. Evidence collection timed out.')
    else:job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
