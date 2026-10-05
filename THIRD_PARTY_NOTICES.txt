@@ -50,3 +50,5 @@ AICSS free components
 Streaming Text: https://www.aicss.dev/components/streaming-text
 Orbs: https://www.aicss.dev/components/orbs
 Source registry retrieved 5 October 2026. AICSS identifies its free components as MIT licensed.
+
+ThinkingState.tsx and ThinkingState.module.css: AICSS public thinking-state registry, https://www.aicss.dev/components/thinking-state.
