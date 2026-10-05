@@ -108,6 +108,7 @@ html .wa-app .wa-main {padding:18px 32px 24px;background:var(--shell-canvas);scr
 .wa-date-time-trigger>svg {font-size:17px;flex-shrink:0}
 .wa-date-time-trigger.has-value {color:var(--text)}
 .wa-date-time-trigger:hover {border-color:var(--text)}
+.wa-date-time-trigger:disabled {opacity:.5;cursor:default;border-color:var(--border)}
 .wa-date-time-trigger:focus-visible,.wa-date-time-trigger[aria-expanded=true] {outline:2px solid var(--primary);outline-offset:-1px}
 .wa-date-picker.MuiPaper-root {width:310px;max-width:calc(100vw - 32px);padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);box-shadow:0 12px 40px #0003}
 .wa-date-picker-heading {display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:12px}
@@ -284,6 +285,15 @@ html[data-theme="dark"] .wa-app .viz-failures i {background:var(--status-breach)
 .wa-summary-split>.viz-summary {display:flex;flex-direction:column}
 .wa-summary-split .viz-summary-body {flex:1;display:flex;flex-direction:column}
 .wa-summary-split .viz-summary-body>p {margin-top:auto;padding-top:20px}
+/* Run details stay bounded; only the fields scroll when content exceeds the panel. */
+.wa-app .wa-run-detail {
+ display:flex;flex-direction:column;height:min(560px,70dvh);min-height:0;overflow:hidden;
+}
+.wa-run-detail>header,.wa-run-detail>.wa-actions {flex-shrink:0}
+.wa-run-detail>dl {
+ flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;
+ scrollbar-gutter:stable;scrollbar-width:thin;
+}
 .wa-app .wa-span-split {align-items:stretch}
 .wa-app .wa-span-split>.wa-panel {height:min(560px,70dvh);min-height:320px;max-height:none;display:flex;flex-direction:column;overflow:hidden}
 .wa-span-split>.wa-panel>header {flex-shrink:0}
@@ -295,6 +305,51 @@ html[data-theme="dark"] .wa-app .viz-failures i {background:var(--status-breach)
 }
 
 /* Pagination stays visible outside each independently scrolling table body. */
+/* Keep both lines inside every timeline count bubble, including small groups. */
+.ref-cluster-plot .ref-cluster>span,
+.ref-cluster-plot .ref-cluster.group:not(.active)>span {
+ width:56px;height:56px;box-sizing:border-box;padding:8px 5px;gap:1px;
+ text-align:center;line-height:normal;
+}
+.ref-cluster-plot .ref-cluster.active>span {width:62px;height:62px}
+.ref-cluster-plot .ref-cluster b {display:block;font-size:13px;line-height:17px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ref-cluster-plot .ref-cluster small {display:block;font-size:10px;line-height:12px;white-space:nowrap}
+.execution-heading {flex:1;min-width:0}
+.execution-heading>span {display:block;font-size:11px;line-height:18px;color:var(--muted);margin-top:2px}
+.execution-panel>header>.MuiButton-root {font-size:12px;border-radius:7px}
+.execution-panel .MuiButton-startIcon svg {font-size:18px}
+.execution-setup {padding:18px 20px 14px}
+.execution-launchbar {display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.execution-launchbar>.MuiTextField-root {width:390px;max-width:100%;min-width:0}
+.execution-launchbar>.MuiButton-root {min-height:40px;padding:8px 16px;border-radius:7px;white-space:nowrap;font-size:13px}
+.execution-config {display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin-top:12px;font-size:11px;line-height:18px;color:var(--muted)}
+.execution-threshold {display:inline-flex;align-items:center;gap:6px;padding:2px 7px;background:var(--shell-canvas);border:1px solid var(--border);border-radius:5px}
+.execution-threshold strong {font-weight:500;color:var(--text)}
+.execution-panel>.execution-alert {margin:14px 20px 0;font-size:12px;border-radius:7px}
+.execution-empty {display:flex;align-items:center;gap:14px;margin:0 20px 18px;padding:20px;border:1px dashed var(--border);border-radius:8px;background:var(--shell-canvas)}
+.execution-empty-icon {display:grid;place-items:center;width:38px;height:38px;border-radius:9px;background:var(--surface);border:1px solid var(--border);color:var(--muted);flex-shrink:0}
+.execution-empty-icon svg {font-size:22px}
+.execution-empty strong {font-size:13px;font-weight:500;line-height:20px}
+.execution-empty p {font-size:12px;line-height:20px;color:var(--muted);margin:3px 0 0}
+.execution-list-heading {display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--border);padding:12px 20px}
+.execution-list-heading h3 {font-size:13px;font-weight:600;margin:0}
+.execution-list-heading>span {font-size:11px;color:var(--muted)}
+.execution-run-id {font-weight:500}
+.execution-state {display:inline-flex;padding:2px 7px;font-size:11px;line-height:20px;border:1px solid var(--border);border-radius:5px;text-transform:capitalize;color:var(--muted)}
+.execution-state[data-state=completed] {background:var(--status-pass-bg);color:var(--status-pass);border-color:transparent}
+.execution-state[data-state=failed] {background:var(--status-breach-bg);color:var(--status-breach);border-color:transparent}
+.execution-state[data-state=interrupted] {background:var(--status-unknown-bg);color:var(--status-unknown);border-color:transparent}
+.execution-state:is([data-state=queued],[data-state=running],[data-state=collecting]) {background:var(--selected);color:var(--primary);border-color:transparent}
+.execution-panel td:last-child>.MuiButton-root {font-size:12px;white-space:nowrap}
+.wa-app .execution-panel>footer {background:var(--shell-navigation);font-size:11px}
+@media(max-width:700px) {
+ .execution-setup {padding:16px}
+ .execution-launchbar>.MuiTextField-root {flex:1 1 100%;width:100%}
+ .execution-config {gap:8px 12px}
+ .execution-empty {padding:16px;margin:0 16px 16px;align-items:flex-start}
+ .execution-panel>.execution-alert {margin:12px 16px 0}
+ .execution-panel table {min-width:700px}
+}
 .query-heading {min-width:0;flex:1}
 .query-heading>span {display:block;font-size:11px;line-height:18px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
 .query-panel>header>.MuiButton-root {border-radius:7px;font-size:12px;flex-shrink:0}

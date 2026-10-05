@@ -1,3 +1,4 @@
+import {formatUTCDateTime} from './dateTime';
 import {Button,IconButton,Tooltip} from '@mui/material';
 import MenuOutlined from '@mui/icons-material/MenuOutlined';
 import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
@@ -29,7 +30,7 @@ export default function PageHeader({section,title,description,source,readAt,busy
   </div>
   <div className="workspace-context" aria-label="Evidence context">
    <span className="workspace-source">{source}</span>
-   <span className="workspace-timestamp"><AccessTimeOutlined aria-hidden="true"/>{readAt?<><span>Read <time dateTime={readAt}>{new Date(readAt).toLocaleString('en-GB',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</time> UTC</span></>:<span>Awaiting evidence</span>}</span>
+   <span className="workspace-timestamp"><AccessTimeOutlined aria-hidden="true"/>{readAt?<><span>Read <time dateTime={readAt}>{formatUTCDateTime(readAt)}</time> UTC</span></>:<span>Awaiting evidence</span>}</span>
    <Tooltip title="Control 9 is not assessed in the workshop evidence. A verdict cannot be established."><span className="workspace-assessment" tabIndex={0}><InfoOutlined aria-hidden="true"/>Control 9 · Not assessed</span></Tooltip>
   </div>
  </header>;

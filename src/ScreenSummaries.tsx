@@ -1,3 +1,4 @@
+import {formatUTCDateTime} from './dateTime';
 import {MetricCard} from './MetricCard';
 import {PaginatedTable} from './PaginatedTable';
 import {Button} from '@mui/material';
@@ -12,7 +13,7 @@ import type {WorkspaceRecord} from './workspaceModel';
 
 export function RecentActivity({runs,onInspect}:{runs:AssuranceRun[];onInspect:(id:string)=>void}){
  const records:(AssuranceEvent & {runId:string})[]=runs.flatMap(run=>run.events.map(event=>({...event,runId:run.id}))).filter(e=>e.time).sort((a,b)=>Date.parse(b.time!)-Date.parse(a.time!)).slice(0,25);
- return <section className="wa-panel wa-recent-activity"><header><h2>Recent execution activity</h2><span>Latest 25 timestamped source records · refresh follows connection status</span></header><PaginatedTable label="Recent execution activity" scrollClassName="wa-table-wrap"><table><thead><tr><th>Time · UTC</th><th>Run</th><th>Agent / principal</th><th>Activity</th><th>Recorded outcome</th></tr></thead><tbody>{records.map(e=><tr key={`${e.runId}/${e.id}`}><td>{new Date(e.time!).toLocaleString('en-GB',{timeZone:'UTC'})}</td><td><button className="wa-link" onClick={()=>onInspect(e.runId)}>{e.runId}</button></td><td>{e.actor??'Not recorded'}</td><td>{category(e)} · {e.phase??'Transport'}</td><td>{String(e.delivery_status??e.verdict??e.outcome??e.decision??'Not recorded')}</td></tr>)}</tbody></table>{!records.length&&<p className="wa-empty">No timestamped records collected.</p>}</PaginatedTable><footer>Ordered by source timestamp, not arrival time. Open a run for its detailed event timeline.</footer></section>
+ return <section className="wa-panel wa-recent-activity"><header><h2>Recent execution activity</h2><span>Latest 25 timestamped source records · refresh follows connection status</span></header><PaginatedTable label="Recent execution activity" scrollClassName="wa-table-wrap"><table><thead><tr><th>Time · UTC</th><th>Run</th><th>Agent / principal</th><th>Activity</th><th>Recorded outcome</th></tr></thead><tbody>{records.map(e=><tr key={`${e.runId}/${e.id}`}><td>{formatUTCDateTime(e.time)}</td><td><button className="wa-link" onClick={()=>onInspect(e.runId)}>{e.runId}</button></td><td>{e.actor??'Not recorded'}</td><td>{category(e)} · {e.phase??'Transport'}</td><td>{String(e.delivery_status??e.verdict??e.outcome??e.decision??'Not recorded')}</td></tr>)}</tbody></table>{!records.length&&<p className="wa-empty">No timestamped records collected.</p>}</PaginatedTable><footer>Ordered by source timestamp, not arrival time. Open a run for its detailed event timeline.</footer></section>
 }
 
 const categoryIcons=[SmartToyOutlined,AutoAwesomeOutlined,BuildOutlined,VerifiedUserOutlined,AccountBalanceWalletOutlined,NotificationsOutlined];

@@ -1,4 +1,4 @@
-import {PaginatedTable} from './PaginatedTable';
+import {PaginatedTable} from '../../src/PaginatedTable';
 import {useState} from 'react';
 import {Box,Typography,Tooltip,IconButton,TextField,MenuItem,Button,Table,TableBody,TableCell,TableHead,TableRow,TableContainer} from '@mui/material';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
-    "test": "node --experimental-strip-types --test src/*.test.ts"
+    "build": "npm run build:checker && tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test src/*.test.ts archive/legacy-ui/*.test.ts && python3 -m unittest discover -s scripts -p test_offline_checker.py",
+    "build:checker": "python3 scripts/build_offline_checker.py"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

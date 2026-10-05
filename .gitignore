@@ -5,3 +5,5 @@ dist/
 # Local review screenshots
 /*.jpg
 .DS_Store
+__pycache__/
+*.pyc

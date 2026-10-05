@@ -1,3 +1,4 @@
+import {formatUTCDate,formatUTCTime,formatUTCDateTime} from './dateTime';
 import {Button} from '@mui/material';
 import PlayArrowOutlined from '@mui/icons-material/PlayArrowOutlined';
 import PauseOutlined from '@mui/icons-material/PauseOutlined';
@@ -11,16 +12,14 @@ type Props={
 
 function Timestamp({value}:{value?:string|null}){
  if(!value)return <strong className="monitor-waiting">Awaiting evidence</strong>;
- const date=new Date(value);
- return <time className="monitor-timestamp" dateTime={value} title={value}>
-  <strong>{date.toLocaleDateString('en-GB',{timeZone:'UTC',day:'2-digit',month:'short',year:'numeric'})}</strong>
-  <span>{date.toLocaleTimeString('en-GB',{timeZone:'UTC',hourCycle:'h23'})} UTC</span>
+ return <time className="monitor-timestamp" dateTime={value} title={`${formatUTCDateTime(value)} UTC`}>
+  <strong>{formatUTCDate(value)}</strong>
+  <span>{formatUTCTime(value)} UTC</span>
  </time>;
 }
 
 export function ExecutionMonitor({connection,polling,lastCheck,readAt,runs,records,onToggle,runnerUrl}:Props){
  const connected=connection.startsWith('Connected');
- const fallback=connection.includes('snapshot fallback');
  return <section className="wa-panel wa-monitor" aria-label="Execution evidence monitor">
   <header>
    <div className="monitor-title"><h2>Execution evidence monitor</h2><p>Connection health and evidence freshness</p></div>
@@ -32,8 +31,8 @@ export function ExecutionMonitor({connection,polling,lastCheck,readAt,runs,recor
   </header>
   <div className="monitor-body">
    <div className="monitor-connection" role="status">
-    <span className={`monitor-status ${connected?'is-connected':fallback?'is-fallback':''}`}>{connected?'Connected':fallback?'Snapshot fallback':'Awaiting connection'}</span>
-    <span>{fallback?'Evidence service unavailable. Showing the last saved workshop snapshot.':connection}</span>
+    <span className={`monitor-status ${connected?'is-connected':''}`}>{connected?'Connected':'Awaiting connection'}</span>
+    <span>{connection}</span>
    </div>
    <dl className="monitor-metrics">
     <div><dt>Last connection check</dt><dd><Timestamp value={lastCheck}/></dd></div>

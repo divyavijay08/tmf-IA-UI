@@ -1,4 +1,4 @@
-import {PaginatedTable} from './PaginatedTable';
+import {PaginatedTable} from '../../src/PaginatedTable';
 import {useState} from 'react';
 import {Box,Typography,TextField,MenuItem,Chip,Button,Tabs,Tab,Tooltip,Table,TableHead,TableBody,TableRow,TableCell,TableContainer,Alert} from '@mui/material';
 import {traceFor,type Span} from './traceData';

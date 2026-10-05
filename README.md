@@ -1,57 +1,42 @@
 # Team Alpha — Assurance UI
 
-React + TypeScript evidence and observability console for the Trustworthy AI and Data hackathon
+React and TypeScript console for collected execution evidence, control assessments and CloudWatch telemetry.
 
 ## Run locally
 
-Requires Node.js 22 or newer and npm.
+Requires Node.js 22.18+ and Python 3. Node.js 22.6+ also works with the experimental type-stripping flag used by the test and checker commands.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173/.
+Open http://127.0.0.1:5173/. Configure the same-origin API proxy as described in [INTEGRATION.md](INTEGRATION.md). Without a connected service, the app shows evidence as unavailable; no bundled snapshot is substituted.
 
 ```sh
-npm run build
 npm test
+npm run build
 ```
 
-## Features
+The build type-checks the app, generates the offline checker from current source, and creates `dist/`. See [JUDGE_UI_DEPLOYMENT.md](JUDGE_UI_DEPLOYMENT.md) for deployment.
 
-- Overview with computed sample metrics, area charts, and radial summaries
-- Searchable agent runs and exportable control evidence
-- Observability waterfall with simulated agent, model, tool, and evaluation spans
-- Fixed-header evidence drawer with control and time-window selection
-- Control definitions, judging artifacts, architecture sketch, gaps, and impact placeholders
-- Responsive navigation, light/dark themes, and polling status
+## Evidence and execution
 
-## Data and integrations
+- The active entry point is `src/AssuranceApp.tsx`. Overview, run inspection, search, coverage and charts use collected service evidence.
+- CloudWatch retrieval uses the telemetry API and exact trace IDs for run correlation. Capture timestamps and coverage limits remain visible.
+- Run execution requires the configured deployed service and an explicit Start run action. Process completion, control satisfaction and business success are separate results.
+- C7, C9 and C16 can be recomputed from supplied records and declared thresholds. Missing inventories, provenance or quality baselines remain insufficient evidence.
+- ServiceNow opens the configured browser workspace. Current import status, per-run linkage and notification delivery are not asserted without connector evidence.
+- Business benefit remains unmeasured until supporting baseline and outcome evidence is supplied.
 
-Trust chain defaults to three **real AWS Workshop evidence snapshots**, with capture time, source records and evaluator limitations. Refreshing reloads the saved export; it is not continuous AWS polling. Updated JSON exports can be imported. Demo scenarios and the other dashboard views remain synthetic. ServiceNow opens in its browser workspace using the existing session; no ServiceNow API is used and run-to-record correlation is not yet verified. The UI does not execute agents, enforce controls or deliver notifications. Impact remains unmeasured.
+## Audit bundles
 
-See [INTEGRATION.md](INTEGRATION.md) for the adapter boundary and backend data needed by each view. Do not place AWS or ServiceNow credentials in the frontend.
+Exports contain loaded assurance evidence, available session or explicitly imported telemetry, and local finding notes. Missing attachments are reported; historical foundation or governance captures are never substituted. Import verifies the checksum and labels the evidence as offline. A checksum does not authenticate its origin or prove completeness.
 
-Adapted UI components are credited in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+The downloadable checker is generated during every build from `src/controlQuery.ts` and `src/assuranceData.ts`. It evaluates C7, C9 and C16 without network access. Supply your own exported audit bundle; the download contains no saved evidence or precomputed verdicts.
 
+## Historical material
 
-### Hackathon judge flow (5 October update)
+Recorded test captures live in `tests/fixtures`, outside public assets. Retired demo components, synthetic fixtures and their regression tests live in `archive/legacy-ui`; the active app does not import them. Their original historical integration notes are retained in that directory for reference.
 
-The active UI shares run, control and window selection. Trust chain and Audit workspace contain an independent browser query; saved evaluator reports remain separately labelled. C16 always assesses the full run cap and reports selected-window usage separately. C7 uses an independent expected-event inventory when supplied; saved report mappings cannot establish independent coverage. Unknown and no-evidence assessments are distinct from breach.
-
-Audit bundles include Assurance data, CloudWatch capture and local finding annotations, protected by a SHA-256 checksum. Import checks the checksum and loads the supplied telemetry. This detects modifications against the included checksum; it does not authenticate origin or prove capture completeness. Local finding notes are not ServiceNow submissions or verified retests.
-
-Collector inputs: `c16-threshold.json` (version, effective_at, cap/max_total_tokens, owner, exception_tolerance=0); `expected-calls.json` (call_ids); `expected-events.json` (events with id, source, time); per-call usage references must carry threshold_version. Preserve the original declared threshold; do not fill in retrospective dates to manufacture a pass.
-
-ServiceNow browser views include the supplied concurrent import record, Control Tower and Agent Studio. Embedding did not render in the Chrome acceptance check; external authenticated browser links are the supported fallback. No security headers are bypassed. The observed CloudWatch HTTP 200 responses are distinct from transformation success and notification delivery. Foundation completion, pre-call enforcement, cross-zone bindings and notification receipts remain dependent on actual lab evidence.
-
-
-Workspace expansion (5 October 2026):
-- Navigation now separates workspace overview, runtime monitoring, foundation, agent inventory, execution runs, evidence search, CloudWatch traces, control inspection, findings, notification records, ServiceNow, coverage and offline reproduction.
-- All-run evidence search uses composite run/record IDs. UTC windows exclude untimed evidence. Exact call/action joins stay within the run; timing proximity is not treated as correlation.
-- The real AWS c16-breach-01 export is included (91,113 tokens / 60,000 limit). Saved evaluation and independent query results are separate.
-- A fresh read-only AWS preflight is captured in public/data/foundation-preflight.json. It checks platform access and shows 12 Approved Alpha AgentConfigs; it does not establish scenario or business completion.
-- ServiceNow TH0026475 was browser inspected: Complete, zero transformed rows. The browser observation is exported with audit bundles.
-- Monitoring polls the read-only evidence endpoint every 15 seconds while visible; snapshot fallback is explicit. It does not launch runtime agents or send external notifications.
-- Downloadable Node offline checker is at public/downloads/alpha-independent-reproduction.zip. The browser bundle also includes telemetry, foundation, governance observation and local findings. Import merges finding history and pauses monitoring.
+Adapted UI components are credited in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt). Never place service credentials in frontend code or public assets.

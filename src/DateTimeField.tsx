@@ -1,17 +1,16 @@
+import {formatUTCDate,formatUTCDateTime} from './dateTime';
 import {useId,useState,type MouseEvent} from 'react';
 import {Button,IconButton,Popover} from '@mui/material';
 import CalendarTodayOutlined from '@mui/icons-material/CalendarTodayOutlined';
 import ChevronLeft from '@mui/icons-material/ChevronLeft';
 import ChevronRight from '@mui/icons-material/ChevronRight';
 
-type Props={label:string;prompt:string;value:string;onChange:(value:string)=>void};
+type Props={label:string;prompt:string;value:string;disabled?:boolean;onChange:(value:string)=>void};
 const pad=(value:number)=>String(value).padStart(2,'0');
 const dateKey=(date:Date)=>`${date.getUTCFullYear()}-${pad(date.getUTCMonth()+1)}-${pad(date.getUTCDate())}`;
-const formatDate=(value:string)=>new Date(`${value}Z`).toLocaleString('en-GB',{
- timeZone:'UTC',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23',
-});
+const formatDate=(value:string)=>formatUTCDateTime(value,false);
 
-export function DateTimeField({label,prompt,value,onChange}:Props){
+export function DateTimeField({label,prompt,value,disabled=false,onChange}:Props){
  const id=useId();
  const [anchor,setAnchor]=useState<HTMLButtonElement|null>(null);
  const [month,setMonth]=useState(()=>new Date());
@@ -33,7 +32,7 @@ export function DateTimeField({label,prompt,value,onChange}:Props){
  function moveMonth(offset:number){setMonth(new Date(Date.UTC(year,monthIndex+offset,1)))}
  return <div className="wa-date-time-field">
   <span className="wa-date-time-label" id={`${id}-label`}>{label}</span>
-  <button type="button" className={`wa-date-time-trigger ${value?'has-value':''}`} aria-label={label}
+  <button type="button" className={`wa-date-time-trigger ${value?'has-value':''}`} disabled={disabled} aria-label={label}
    aria-describedby={`${id}-value`} aria-haspopup="dialog" aria-expanded={!!anchor}
    aria-controls={anchor?`${id}-picker`:undefined} onClick={open}>
    <span id={`${id}-value`}>{value?formatDate(value):prompt}</span><CalendarTodayOutlined aria-hidden="true"/>
@@ -54,7 +53,7 @@ export function DateTimeField({label,prompt,value,onChange}:Props){
      if(date<1||date>daysInMonth)return <span key={index}/>;
      const dateValue=`${year}-${pad(monthIndex+1)}-${pad(date)}`;
      return <button key={index} type="button" className={dateValue===today?'is-today':''}
-      aria-label={new Date(Date.UTC(year,monthIndex,date)).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',timeZone:'UTC'})}
+      aria-label={formatUTCDate(new Date(Date.UTC(year,monthIndex,date)))}
       aria-pressed={dateValue===day} aria-current={dateValue===today?'date':undefined}
       onClick={()=>setDay(dateValue)}>{date}</button>;
     })}

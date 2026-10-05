@@ -1,4 +1,26 @@
 /* Shared scale from ving-ui/src/theme/tokens.css. */
+/* Bundle fonts with the app: production permits only same-origin resources. */
+@font-face {
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:400;
+  font-display:swap;
+  src:url('./assets/fonts/inter-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:500;
+  font-display:swap;
+  src:url('./assets/fonts/inter-medium.ttf') format('truetype');
+}
+@font-face {
+  font-family:'Inter';
+  font-style:normal;
+  font-weight:600;
+  font-display:swap;
+  src:url('./assets/fonts/inter-semibold.ttf') format('truetype');
+}
 :root {
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-size-overline: 0.75rem;

@@ -81,12 +81,12 @@ git diff --check
 git status --short
 ```
 
-`dist/` is ignored for ordinary new files, but the VM deployment intentionally uses the committed production bundle. Stage source files normally, update tracked build files, and force-add the new hashed JavaScript file:
+`dist/` is ignored for ordinary new files, but the VM deployment intentionally uses the committed production bundle. Stage source files normally, update tracked build files, and force-add the current hashed assets (JavaScript, CSS and fonts):
 
 ```bash
-git add src public index.html vite.config.ts package.json package-lock.json
+git add src public scripts tests archive index.html vite.config.ts tsconfig.json package.json package-lock.json
 git add -u dist
-git add -f dist/assets/index-*.js
+git add -f dist/assets/
 git status --short
 git commit -m "Describe the UI change"
 git push origin main
@@ -233,7 +233,7 @@ npm test
 npm run build
 git add <edited-source-files>
 git add -u dist
-git add -f dist/assets/index-*.js
+git add -f dist/assets/
 git commit -m "Describe the UI change"
 git push origin main
 

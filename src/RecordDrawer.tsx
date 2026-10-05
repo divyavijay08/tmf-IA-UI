@@ -1,12 +1,13 @@
+import {formatUTCDateTime} from './dateTime';
 import {Drawer,Button,IconButton} from '@mui/material';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import type {WorkspaceRecord} from './workspaceModel';
-import {exportJson} from './evidenceApi';
+import {exportJson} from './exportJson';
 const present=(v:unknown)=>v!==null&&v!==undefined&&v!=='';
 const show=(v:unknown)=>typeof v==='object'?JSON.stringify(v):String(v);
 export function RecordDrawer({event,related,onClose,onSelect,onRun}:{event?:WorkspaceRecord;related:WorkspaceRecord[];onClose:()=>void;onSelect:(key:string)=>void;onRun:(id:string)=>void}){
  const notification=event?.phase?.startsWith('notification');
- const fields=event?Object.entries({Run:event.runId,Actor:event.actor,Action:event.phase,'Time UTC':event.time,'Event ID':event.event_id,Outcome:event.verdict??event.outcome??event.decision,'Recipient':event.recipient,'Delivery status':event.delivery_status,'Receipt ID':event.receipt_id,'Notification ID':event.notification_id,'Finding ID':event.finding_id,Channel:event.channel,'Delivered at':event.delivered_at,'Zone':event.zone,Principal:event.principal,Authority:event.authority,'Policy version':event.policy_version,'Threshold version':event.threshold_version,'Threshold digest':event.threshold_digest,'Enforcement point':event.enforcement_point,'Trace ID':event.trace_id,'Span ID':event.span_id,'Parent span':event.parent_span_id,'Call ID':event.call_id,'Logical call ID':event.logical_call_id,'Action ID':event.action_id,'Attempt ID':event.attempt_id,'HTTP status':event.http_status,Asset:event.asset,'ServiceNow number':event.servicenow_number,'ServiceNow record ID':event.servicenow_sys_id}):[];
+ const fields=event?Object.entries({Run:event.runId,Actor:event.actor,Action:event.phase,'Time UTC':present(event.time)?formatUTCDateTime(event.time):event.time,'Event ID':event.event_id,Outcome:event.verdict??event.outcome??event.decision,'Recipient':event.recipient,'Delivery status':event.delivery_status,'Receipt ID':event.receipt_id,'Notification ID':event.notification_id,'Finding ID':event.finding_id,Channel:event.channel,'Delivered at (UTC)':present(event.delivered_at)?formatUTCDateTime(event.delivered_at):event.delivered_at,'Zone':event.zone,Principal:event.principal,Authority:event.authority,'Policy version':event.policy_version,'Threshold version':event.threshold_version,'Threshold digest':event.threshold_digest,'Enforcement point':event.enforcement_point,'Trace ID':event.trace_id,'Span ID':event.span_id,'Parent span':event.parent_span_id,'Call ID':event.call_id,'Logical call ID':event.logical_call_id,'Action ID':event.action_id,'Attempt ID':event.attempt_id,'HTTP status':event.http_status,Asset:event.asset,'ServiceNow number':event.servicenow_number,'ServiceNow record ID':event.servicenow_sys_id}):[];
  const populated=fields.filter(([,v])=>present(v));
  const missing=fields.filter(([,v])=>!present(v));
  return <Drawer anchor="right" open={!!event} onClose={onClose} slotProps={{paper:{className:'wa-record-drawer',role:'dialog','aria-modal':true,'aria-labelledby':'record-drawer-title',sx:{width:{xs:'100%',sm:560},maxWidth:'100vw'}}}}>

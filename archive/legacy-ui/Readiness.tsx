@@ -1,4 +1,4 @@
-import {PaginatedTable} from './PaginatedTable';
+import {PaginatedTable} from '../../src/PaginatedTable';
 import {AuditWorkspace,VerdictChip} from './AssuranceLayer';
 import {useState} from 'react';
 import {Alert,Box,Button,Chip,Typography,TextField,Tabs,Tab,Table,TableBody,TableCell,TableHead,TableRow,TableContainer,Tooltip,Accordion,AccordionSummary,AccordionDetails} from '@mui/material';
