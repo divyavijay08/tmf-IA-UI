@@ -3,6 +3,7 @@
 
 import shutil
 import subprocess
+import re
 from pathlib import Path
 
 
@@ -11,7 +12,7 @@ TOKEN_FILE = Path("/home/ec2-user/environment/assurance-ui-live/service-token")
 NGINX_CONFIG = Path("/etc/nginx/conf.d/codeserver.conf")
 SERVICE_FILE = Path("/etc/systemd/system/team-alpha-ui.service")
 ORIGIN = "https://d2b9v9vzd6k5nc.cloudfront.net"
-ROUTE = """    location /team-alpha/ {
+UNPROTECTED_ROUTE = """    location /team-alpha/ {
       proxy_pass http://127.0.0.1:8768/;
       proxy_set_header Host $host;
       proxy_set_header X-Forwarded-Proto $scheme;
@@ -48,13 +49,36 @@ WantedBy=multi-user.target
 
 def install_gateway_route() -> None:
     current = NGINX_CONFIG.read_text()
-    if "location /team-alpha/" not in current:
+    token_match = re.search(r'if \(\$arg_tkn = "([^"]+)"\)', current)
+    if not token_match:
+        raise SystemExit("Existing workshop gateway token gate was not found")
+    gateway_token = token_match.group(1)
+    protected_route = f"""    location /team-alpha/ {{
+      if ($arg_tkn = "{gateway_token}") {{
+        add_header Set-Cookie "modaas_cockpit={gateway_token}; Path=/; Secure; HttpOnly; SameSite=Lax" always;
+        return 302 /team-alpha/;
+      }}
+      if ($cookie_modaas_cockpit != "{gateway_token}") {{
+        return 403;
+      }}
+      proxy_pass http://127.0.0.1:8768/;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_http_version 1.1;
+    }}
+"""
+    if UNPROTECTED_ROUTE in current:
+        backup = NGINX_CONFIG.with_suffix(".conf.team-alpha-backup")
+        if not backup.exists():
+            shutil.copy2(NGINX_CONFIG, backup)
+        NGINX_CONFIG.write_text(current.replace(UNPROTECTED_ROUTE, protected_route, 1))
+    elif "location /team-alpha/" not in current:
         marker = "    location / {"
         server = current.index("listen 8081")
         location = current.index(marker, server)
         backup = NGINX_CONFIG.with_suffix(".conf.team-alpha-backup")
         shutil.copy2(NGINX_CONFIG, backup)
-        NGINX_CONFIG.write_text(current[:location] + ROUTE + current[location:])
+        NGINX_CONFIG.write_text(current[:location] + protected_route + current[location:])
     try:
         run("nginx", "-t")
     except subprocess.CalledProcessError:
