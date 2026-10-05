@@ -1,12 +1,35 @@
 import type {AssuranceRun,AssuranceData,RecordData} from './assuranceData';
 export const statusClass=(v:unknown)=>['SATISFIED','PASS'].includes(String(v))?'good':['NOT SATISFIED','BREACH'].includes(String(v))?'bad':'unknown';
 export type QueryResult={control:string;runId:string;scope:string;verdict:string;measurement:number|null;windowMeasurement:number|null;limit:number|null;coverage:number|null;exceptions:number;denominator:number;exceptionRate:number|null;allowedExceptionRate:number|null;refs:string[];gaps:string[];enforcement:string;algorithm:string};
-const numeric=(v:unknown)=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
+const numeric=(v:unknown)=>(typeof v==='number'||typeof v==='string')&&v!==''&&Number.isFinite(Number(v))?Number(v):null;
 const stamp=(v:unknown)=>typeof v==='string'&&Number.isFinite(Date.parse(v))?Date.parse(v):null;
 export function queryControl(run:AssuranceRun,control:string,window?:[number,number]):QueryResult{
  const out:QueryResult={control,runId:run.id,scope:window?'Selected window; run cap remains whole-run':'Whole run',verdict:'INSUFFICIENT EVIDENCE',measurement:null,windowMeasurement:null,limit:null,coverage:null,exceptions:0,denominator:0,exceptionRate:null,allowedExceptionRate:null,refs:[],gaps:[],enforcement:'Not independently established',algorithm:'alpha-query-v1'};
  if(window&&(!window.every(Number.isFinite)||window[0]>window[1])){out.gaps.push('Invalid query window');return out}
- if(control==='9'){out.gaps.push('Frozen baseline and scored quality windows are not supplied');return out}
+ if(control==='9'){
+  const baseline=run.qualityBaseline??{},threshold=run.c9Threshold??{},samples=run.qualityWindows??[],expected=run.expectedQualityWindowIds;
+  const base=numeric(baseline.value),declared=stamp(baseline.frozen_at),effective=stamp(threshold.declared_at??threshold.effective_at);
+  out.limit=numeric(threshold.max_absolute_drift);out.allowedExceptionRate=numeric(threshold.allowed_exception_rate);
+  out.algorithm='alpha-quality-drift-v1';out.scope='Declared quality windows; absolute drift from frozen baseline';
+  if(base==null||declared==null||!baseline.version||!baseline.metric)out.gaps.push('Frozen baseline value, metric, version and time are required');
+  if(out.limit==null||out.limit<0||!threshold.version||effective==null||threshold.metric!==baseline.metric)out.gaps.push('Matching versioned drift threshold is required');
+  if(out.allowedExceptionRate==null||out.allowedExceptionRate<0||out.allowedExceptionRate>1)out.gaps.push('Allowed drift exception rate is missing or invalid');
+  if(!Array.isArray(expected)||!expected.length||new Set(expected).size!==expected.length)out.gaps.push('Independent expected quality-window inventory is missing or invalid');
+  const seen=new Set<string>(),drifts:number[]=[];
+  for(const sample of samples){const at=stamp(sample.start),end=stamp(sample.end),score=numeric(sample.value);
+   if(!sample.id||seen.has(sample.id)||at==null||end==null||end<at||score==null){out.gaps.push('Invalid or duplicate scored window');continue}
+   seen.add(sample.id);out.refs.push(sample.id);
+   if(sample.baseline_version!==baseline.version||sample.threshold_version!==threshold.version||sample.metric!==baseline.metric)out.gaps.push('Scored window is not bound to the frozen baseline and threshold');
+   if(declared==null||effective==null||at<declared||at<effective)out.gaps.push('Baseline or threshold was not frozen before scoring');
+   if(base!=null)drifts.push(Math.abs(score-base));
+  }
+  out.denominator=expected?.length??0;out.coverage=expected?.length?expected.filter(id=>seen.has(id)).length/expected.length:null;
+  if(!samples.length||expected?.some(id=>!seen.has(id))||[...seen].some(id=>!expected?.includes(id)))out.gaps.push('Quality-window inventory does not reconcile');
+  out.measurement=drifts.length?Math.max(...drifts):null;out.windowMeasurement=out.measurement;out.exceptions=out.limit==null?0:drifts.filter(v=>v>out.limit!).length;out.exceptionRate=drifts.length?out.exceptions/drifts.length:null;
+  if(!out.gaps.length)out.verdict=out.exceptionRate!>out.allowedExceptionRate!?'BREACH':'PASS';
+  out.gaps=[...new Set(out.gaps)];return out;
+ }
+ if(!['7','16'].includes(control)){out.gaps.push('Unsupported control');return out}
  if(control==='16'){
   const threshold=run.c16Threshold??run.budget.threshold??{},calls=run.c16['evidence.refs']??[];
   out.limit=numeric(threshold.max_total_tokens??threshold.cap??run.c16['threshold.value']);out.allowedExceptionRate=numeric(threshold.exception_tolerance??threshold.allowed_exception_rate);

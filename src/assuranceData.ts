@@ -1,6 +1,6 @@
 export type RecordData = {[key:string]:any};
 export type AssuranceEvent=RecordData & {id:string;source:string;time:string|null;actor?:string;phase?:string};
-export type AssuranceRun={id:string;scenario:string;sources:RecordData;collectedAt:string|null;window:string[];c7:RecordData;c7Threshold:RecordData;c16:RecordData;budget:RecordData;c16Threshold?:RecordData;expectedCallIds?:string[];expectedEvents?:RecordData[];workflow:{aborted:boolean|null;completedAt:string|null;results:RecordData[];failures:RecordData[]};events:AssuranceEvent[]};
+export type AssuranceRun={id:string;scenario:string;sources:RecordData;collectedAt:string|null;window:string[];c7:RecordData;c7Threshold:RecordData;c16:RecordData;budget:RecordData;c16Threshold?:RecordData;c9?:RecordData;c9Threshold?:RecordData;qualityBaseline?:RecordData;qualityWindows?:RecordData[];expectedQualityWindowIds?:string[];expectedCallIds?:string[];expectedEvents?:RecordData[];workflow:{aborted:boolean|null;completedAt:string|null;results:RecordData[];failures:RecordData[]};events:AssuranceEvent[]};
 export type AssuranceData={schema:2;source:string;readAt:string;runs:AssuranceRun[];errors:RecordData[];freshness:string};
 export function parseAssurance(value:unknown):AssuranceData{
  const d=value as AssuranceData;

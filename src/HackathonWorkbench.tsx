@@ -17,7 +17,7 @@ import {parseCloudCapture,type CloudCapture} from './cloudwatchData';
 export const serviceNowImport='https://platformdemoh8.service-now.com/sys_concurrent_import_set.do?sys_id=936f843c3b7b8350e837212c95e45a97';
 const fmt=(v:any)=>v==null?'Not recorded':typeof v==='object'?JSON.stringify(v):String(v);
 export function QueryPanel({run,control='16',window}:{run:AssuranceRun;control?:string;window?:[number,number]}){
- const [result,setResult]=useState<ReturnType<typeof queryControl>|null>(null);const key=JSON.stringify([run.id,control,window]);const [checked,setChecked]=useState('');const current=checked===key?result:null;
+ const [result,setResult]=useState<ReturnType<typeof queryControl>|null>(null);const key=JSON.stringify([run,control,window]);const [checked,setChecked]=useState('');const current=checked===key?result:null;
  const display=(v:unknown)=>typeof v==='number'?v.toLocaleString():fmt(v);
  return <section className="wa-panel hx-query query-panel">
   <header><div className="query-heading"><h2>Independent control query</h2><span>{run.id} · Control {control}</span></div><Button variant="contained" startIcon={<ManageSearchOutlined/>} onClick={()=>{setResult(queryControl(run,control,window));setChecked(key)}}>Recompute evidence</Button></header>
@@ -41,7 +41,7 @@ export function QueryPanel({run,control='16',window}:{run:AssuranceRun;control?:
  </section>;
 }
 export function RegisterPanel({run,control}:{run:AssuranceRun;control:string}){
- const t=control==='7'?run.c7Threshold:control==='16'?run.c16Threshold??run.budget.threshold??{}:{};
+ const t=control==='7'?run.c7Threshold:control==='16'?run.c16Threshold??run.budget.threshold??{}:run.c9Threshold??{};
  const statement=control==='7'?'Required actions are recorded and eligible recording gaps remain within the declared tolerance':control==='16'?'Input and output tokens across agents and retries stay within the declared per-run cap':'Quality drift remains within a frozen baseline tolerance';
  const objective=control==='7'?'Accountable, complete event recording':control==='16'?'Bound model spend':'Detect quality degradation';
  const procedure=control==='7'?'Reconcile expected actions; measure gaps between unique eligible event timestamps':control==='16'?'Deduplicate leaf calls and retries; reconcile expected inventory; sum input + output tokens':'Compare scored windows to dated baseline';
