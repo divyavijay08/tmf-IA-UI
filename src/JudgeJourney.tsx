@@ -13,7 +13,6 @@ import {workflowStatus} from './assuranceData';
 import {parseCloudCapture,type CloudSpan} from './cloudwatchData';
 import {SpanWaterfall} from './WorkspaceCharts';
 import {StreamingText} from './aicss/StreamingText';
-import {Orb,type OrbVariant} from './aicss/Orb';
 import {workshopLinks} from './workshopLinks';
 
 const REFERENCE_TRACE='c0b7e0a31db241a3adf9218c40c6cf8f';
@@ -38,11 +37,11 @@ const verdict=(value:unknown)=>value==null?'Not assessed':String(value);
 const verdictClass=(value:unknown)=>['SATISFIED','PASS'].includes(String(value))?'good':['NOT SATISFIED','BREACH'].includes(String(value))?'bad':'unknown';
 const display=(value:unknown)=>value==null?'Awaiting evidence':typeof value==='number'?value.toLocaleString():String(value);
 const actorFor=(span:CloudSpan)=>span.tool?.includes('customer')?'Customer service agent':span.tool?.includes('runbook')?'IT resolution agent':span.tool?.includes('network')?'Network agent':span.service||'Agent';
-const orbFor=(actor:string):OrbVariant=>actor.startsWith('Customer')?'C3':actor.startsWith('IT')?'B5':'G2';
+
 
 function AgentEvent({span}:{span:CloudSpan}){
  const actor=actorFor(span),tool=span.operation==='execute_tool'||!!span.tool;
- return <div className="journey-event"><Orb variant={orbFor(actor)} size={22}/><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{tool?'Tool call':'Agent activity'} · <code>{span.tool||span.name}</code></p></div><span className="journey-event-ok"><CheckCircleOutline/> Recorded</span></div>;
+ return <div className="journey-event"><CheckCircleOutline aria-hidden="true"/><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{tool?'Tool call':'Agent activity'} · <code>{span.tool||span.name}</code></p></div><span className="journey-event-ok"><CheckCircleOutline/> Recorded</span></div>;
 }
 
 export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTelemetry}:JourneyProps){
@@ -86,23 +85,23 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
    <label className="chat-search"><SearchRounded/><input aria-label="Search conversations" placeholder="Search conversations" value={search} onChange={e=>setSearch(e.target.value)}/></label>
    <p className="chat-history-label">Recent investigations</p>
    <div className="chat-history-list">{jobs.filter(j=>`${j.runId} ${j.scenario}`.toLowerCase().includes(search.toLowerCase())).map(j=><button key={j.id} aria-pressed={j.id===jobId} onClick={()=>{setJobId(j.id);setSpans([]);setTab('Conversation')}}><ChatBubbleOutlineRounded/><span><b>{config?.scenarios.find(s=>s.id===j.scenario)?.title||j.scenario}</b><small>{j.state} · {new Date(j.createdAt).toLocaleDateString()}</small></span></button>)}{!jobs.length&&<p className="chat-history-empty">Your investigations will appear here.</p>}</div>
-   <div className="chat-history-footer"><Orb variant="S4" size={20}/><span>Customer service agent<small>Team Alpha workspace</small></span></div>
+   <div className="chat-history-footer"><ChatBubbleOutlineRounded aria-hidden="true"/><span>Customer service agent<small>Team Alpha workspace</small></span></div>
   </aside>
   <div className="chat-workspace">
    <header className="chat-topbar"><div><strong>{job?'Service investigation':'New conversation'}</strong>{job&&<span className="chat-status">{job.state}</span>}</div><div className="chat-view-tabs"><button aria-pressed={tab==='Conversation'} onClick={()=>setTab('Conversation')}>Conversation</button><button disabled={!job} aria-pressed={tab==='Trace & controls'} onClick={()=>setTab('Trace & controls')}>Trace & controls</button></div></header>
    {error&&<Alert severity="warning">{error}</Alert>}
    {tab==='Conversation'?<div className={`chat-conversation ${job?'has-conversation':'is-empty'}`}>
-    {!job?<div className="chat-welcome"><Orb variant="S4" size={42}/><h1>How can I help you today?</h1><p>Investigate a service issue with your customer, IT and network agents.</p></div>:<div className="chat-transcript">
+    {!job?<div className="chat-welcome"><h1>How can I help you today?</h1><p>Investigate a service issue with your customer, IT and network agents.</p></div>:<div className="chat-transcript">
      <div className="chat-user-message">{job.id===promptJobId?submittedPrompt:`Investigate ${config?.scenarios.find(s=>s.id===job.scenario)?.title||job.scenario}.`}</div>
-     <div className="chat-agent-heading"><Orb variant="S4" size={24}/><b>Alpha assistant</b></div>
+     <div className="chat-agent-heading"><ChatBubbleOutlineRounded aria-hidden="true"/><b>Alpha assistant</b></div>
      {isActive(job.state)?<div className="chat-processing"><ThinkingState/><span>Gathering evidence · {job.state}</span></div>:<StreamingText text={`This investigation is ${job.state}. Review the recorded tool activity and the trace evidence below.`}/>}
      <details className="chat-activity" open={isActive(job.state)}><summary>Agent activity <span>{toolSpans.length} recorded tool calls</span></summary><div className="journey-events">{toolSpans.length?toolSpans.map(s=><AgentEvent key={s.traceId+s.spanId} span={s}/>):<p>No tool spans loaded for this conversation yet.</p>}</div></details>
      {job.message&&<p className="chat-run-message">{job.message}</p>}
      {job.traceId&&<div className="chat-evidence-links"><Button onClick={()=>setTab('Trace & controls')}>Explore trace & controls</Button><Button component="a" href={CLOUDWATCH.replace(REFERENCE_TRACE,job.traceId)} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewOutlined/>}>CloudWatch</Button></div>}
     </div>}
-    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Describe the service issue…" rows={2} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.enabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span><Orb variant="S4" size={18}/>Customer service <span className="chat-compose-mode">Guided investigation</span></span><button type="submit" aria-label="Start investigation" disabled={launching||!config?.enabled||!scenario||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></form>
+    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Describe the service issue…" rows={2} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.enabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span>Customer service <span className="chat-compose-mode">Guided investigation</span></span><button type="submit" aria-label="Start investigation" disabled={launching||!config?.enabled||!scenario||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></form>
     {!job&&<div className="chat-suggestions">{['Investigate fronthaul degradation','Check customer impact','Review network and digital twin'].map(label=><button key={label} onClick={()=>setPrompt(`${label}. Use the approved ${scenario?.title||'fronthaul degradation'} scenario and report the supporting evidence.`)}>{label}</button>)}</div>}
-    <p className="chat-compose-note">{scenario?`Runs the approved scenario: ${scenario.title}.`:'Connecting to the execution service…'} Evidence updates as it becomes available.</p></div>
+    <p className="chat-compose-note">{scenario?`Runs the approved scenario: ${scenario.title}.`:(error?'Execution service unavailable.':'Connecting to the execution service…')} Evidence updates as it becomes available.</p></div>
    </div>:<div className="chat-inspector"><TraceControls spans={visible} selected={selectedSpan} onSelected={setSelectedSpan} run={matchedRun} job={job} onOpenRun={onOpenRun} onOpenControls={onOpenControls} onOpenTelemetry={onOpenTelemetry}/></div>}
   </div>
  </section>;
