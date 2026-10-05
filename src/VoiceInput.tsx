@@ -1,6 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
 import MicNoneRounded from '@mui/icons-material/MicNoneRounded';
-import {Orb} from './aicss/Orb';
 
 type Recognition = {
  lang:string;continuous:boolean;interimResults:boolean;
@@ -27,5 +26,5 @@ export function VoiceInput({value,onChange,disabled}:{value:string;onChange:(val
   active.onend=()=>{setListening(false);recognition.current=null};
   setMessage('');try{active.start();setListening(true)}catch{setListening(false);setMessage('Unable to start voice input. Please try again.')}
  }
- return <div className="chat-voice"><button type="button" className="chat-mic" aria-label={listening?'Stop voice input':'Start voice input'} aria-pressed={listening} title={!supported?'Voice input is not supported by this browser':listening?'Stop listening':'Dictate a message'} disabled={disabled||!supported} onClick={toggle}>{listening?<Orb variant="S4" size={22} label="Listening"/>:<MicNoneRounded/>}</button>{(listening||message)&&<span className="chat-voice-status" role="status">{listening?'Listening…':message}</span>}</div>;
+ return <div className="chat-voice"><button type="button" className="chat-mic" aria-label={listening?'Stop voice input':'Start voice input'} aria-pressed={listening} title={!supported?'Voice input is not supported by this browser':listening?'Stop listening':'Dictate a message'} disabled={disabled||!supported} onClick={toggle}>{listening?<span className="voice-wave" aria-hidden="true">{[0,1,2,3,4].map(i=><i key={i}/>)}</span>:<MicNoneRounded/>}</button>{(listening||message)&&<span className="chat-voice-status" role="status">{listening?'Listening…':message}</span>}</div>;
 }
