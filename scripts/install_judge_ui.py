@@ -67,18 +67,18 @@ def install_gateway_route() -> None:
       proxy_http_version 1.1;
     }}
 """
-    if UNPROTECTED_ROUTE in current:
+    if protected_route in current:
         backup = NGINX_CONFIG.with_suffix(".conf.team-alpha-backup")
         if not backup.exists():
             shutil.copy2(NGINX_CONFIG, backup)
-        NGINX_CONFIG.write_text(current.replace(UNPROTECTED_ROUTE, protected_route, 1))
+        NGINX_CONFIG.write_text(current.replace(protected_route, UNPROTECTED_ROUTE, 1))
     elif "location /team-alpha/" not in current:
         marker = "    location / {"
         server = current.index("listen 8081")
         location = current.index(marker, server)
         backup = NGINX_CONFIG.with_suffix(".conf.team-alpha-backup")
         shutil.copy2(NGINX_CONFIG, backup)
-        NGINX_CONFIG.write_text(current[:location] + protected_route + current[location:])
+        NGINX_CONFIG.write_text(current[:location] + UNPROTECTED_ROUTE + current[location:])
     try:
         run("nginx", "-t")
     except subprocess.CalledProcessError:
