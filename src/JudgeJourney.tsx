@@ -13,25 +13,13 @@ import type {AssuranceData,AssuranceRun} from './assuranceData';
 import {workflowStatus} from './assuranceData';
 import {parseCloudCapture,type CloudSpan} from './cloudwatchData';
 import {SpanWaterfall} from './WorkspaceCharts';
-import {StreamingText} from './aicss/StreamingText';
 import {workshopLinks} from './workshopLinks';
 
 const REFERENCE_TRACE='c0b7e0a31db241a3adf9218c40c6cf8f';
 const CLOUDWATCH=`https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#/gen-ai-observability/spans?traceId=${REFERENCE_TRACE}`;
-const DEFAULT_PROMPT='Investigate fronthaul degradation at DU-PHX-04-B. Customer CUST-3310 is reporting connectivity drops. Respect the maintenance freeze and do not make a traffic-affecting change without named approval.';
-type Job={id:string;runId:string;scenario:string;state:string;createdAt:string;message?:string;traceId?:string;invokedAgents?:string[]};
-type Config={enabled:boolean;scenarios:{id:string;title:string}[];threshold:{version?:string};actors:Record<string,string>};
+type Job={id:string;runId:string;scenario:string;state:string;createdAt:string;finishedAt?:string;message?:string;traceId?:string;invokedAgents?:string[];kind?:string;userMessage?:string;answer?:string;parentId?:string;history?:{role:string;content:string}[]};
+type Config={enabled:boolean;chatEnabled?:boolean;scenarios:{id:string;title:string}[];threshold:{version?:string};actors:Record<string,string>};
 type JourneyProps={data:AssuranceData|null;onRefresh:()=>void;onOpenRun:(id:string)=>void;onOpenControls:(id:string)=>void;onOpenTelemetry:(id:string)=>void};
-
-const referenceSpans:CloudSpan[]=[
- {traceId:REFERENCE_TRACE,spanId:'0000000000000001',name:'invoke_agent',kind:'INTERNAL',service:'Customer service agent',startTime:'2026-10-05T17:06:00.000Z',endTime:'2026-10-05T17:06:05.600Z',durationMs:5600,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000002',parentSpanId:'0000000000000001',name:'customer-records___customer_lookup',kind:'CLIENT',service:'Customer service agent',operation:'execute_tool',tool:'customer-records___customer_lookup',startTime:'2026-10-05T17:06:00.620Z',endTime:'2026-10-05T17:06:00.790Z',durationMs:170.6,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000003',parentSpanId:'0000000000000001',name:'delegate to IT resolution',kind:'INTERNAL',service:'Customer service agent',startTime:'2026-10-05T17:06:00.900Z',endTime:'2026-10-05T17:06:05.210Z',durationMs:4310,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000004',parentSpanId:'0000000000000003',name:'runbook-lookup___lookup ×3',kind:'CLIENT',service:'IT resolution agent',operation:'execute_tool',tool:'runbook-lookup___lookup',startTime:'2026-10-05T17:06:01.040Z',endTime:'2026-10-05T17:06:01.240Z',durationMs:196.3,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000005',parentSpanId:'0000000000000001',name:'delegate to network',kind:'INTERNAL',service:'Customer service agent',startTime:'2026-10-05T17:06:01.360Z',endTime:'2026-10-05T17:06:03.670Z',durationMs:2310,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000006',parentSpanId:'0000000000000005',name:'network-twin___predict_rsrp',kind:'CLIENT',service:'Network agent',operation:'execute_tool',tool:'network-twin___predict_rsrp',startTime:'2026-10-05T17:06:01.590Z',endTime:'2026-10-05T17:06:01.790Z',durationMs:200,status:'OK',sourceUrl:CLOUDWATCH},
- {traceId:REFERENCE_TRACE,spanId:'0000000000000007',parentSpanId:'0000000000000001',name:'chat',kind:'CLIENT',service:'IT resolution agent',operation:'chat',model:'nemotron-super-120b',inputTokens:1069,outputTokens:406,totalTokens:1475,startTime:'2026-10-05T17:06:01.900Z',endTime:'2026-10-05T17:06:06.211Z',durationMs:4311,status:'OK',sourceUrl:CLOUDWATCH},
-];
 
 const isActive=(state?:string)=>!!state&&['queued','running','collecting'].includes(state);
 const verdict=(value:unknown)=>value==null?'Not assessed':String(value);
@@ -46,37 +34,48 @@ function AgentEvent({span}:{span:CloudSpan}){
 }
 
 export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTelemetry}:JourneyProps){
- const [config,setConfig]=useState<Config|null>(null),[jobs,setJobs]=useState<Job[]>([]),[prompt,setPrompt]=useState(''),[submittedPrompt,setSubmittedPrompt]=useState(DEFAULT_PROMPT),[jobId,setJobId]=useState(''),[spans,setSpans]=useState<CloudSpan[]>(referenceSpans),[selectedSpan,setSelectedSpan]=useState(referenceSpans[0].spanId),[error,setError]=useState(''),[launching,setLaunching]=useState(false),[tab,setTab]=useState<'Conversation'|'Trace & controls'>('Conversation');
- const request=useRef<{scenario:string;idempotencyKey:string}|null>(null);
+ const [config,setConfig]=useState<Config|null>(null),[jobs,setJobs]=useState<Job[]>([]),[prompt,setPrompt]=useState(''),[jobId,setJobId]=useState(''),[spans,setSpans]=useState<CloudSpan[]>([]),[selectedSpan,setSelectedSpan]=useState(''),[error,setError]=useState(''),[launching,setLaunching]=useState(false),[tab,setTab]=useState<'Conversation'|'Trace & controls'>('Conversation');
+ const request=useRef<{message:string;parentId?:string;idempotencyKey:string}|null>(null);
  const [search,setSearch]=useState('');
- const [promptJobId,setPromptJobId]=useState('');
+ const busy=useRef(false);
+ const refreshRef=useRef(onRefresh);refreshRef.current=onRefresh;
  const job=jobs.find(x=>x.id===jobId),traceId=job?.traceId||'';
- const scenario=useMemo(()=>config?.scenarios.find(s=>/fronthaul/i.test(`${s.id} ${s.title}`))??config?.scenarios[0],[config]);
  const matchedRun=useMemo(()=>data?.runs.find(r=>r.id===job?.runId)||data?.runs.find(r=>r.events.some(e=>e.trace_id===traceId)),[data,job?.runId,traceId]);
 
- async function load(){
-  try{
-   const [c,j]=await Promise.all([fetch('api/execution-config',{cache:'no-store'}),fetch('api/executions',{cache:'no-store'})]);
-   if(!c.ok||!j.ok)throw Error('Live execution service is unavailable');
-   const nextConfig=await c.json() as Config,nextJobs=(await j.json()).executions as Job[];
-   setConfig(nextConfig);setJobs(nextJobs);setError('');
-   if(jobId&&nextJobs.find(x=>x.id===jobId)?.traceId){
-    const latest=nextJobs.find(x=>x.id===jobId)!;await loadTelemetry(latest.traceId!);
-    if(['completed','failed','interrupted'].includes(latest.state)){onRefresh();}
-   }
-  }catch(e){setError((e as Error).message)}
- }
- async function loadTelemetry(id:string){
-  try{const to=new Date(),from=new Date(to.getTime()-30*60_000);const r=await fetch('api/telemetry?'+new URLSearchParams({from:from.toISOString(),to:to.toISOString()}),{cache:'no-store'});if(!r.ok)return;const capture=parseCloudCapture(await r.json());const exact=capture.spans.filter(s=>s.traceId===id).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime));if(exact.length)setSpans(exact)}catch{}
- }
- useEffect(()=>{void load();const timer=setInterval(()=>{if(!document.hidden)void load()},4000);return()=>clearInterval(timer)},[jobId]);
+ useEffect(()=>{
+  const controller=new AbortController();
+  fetch('api/execution-config',{cache:'no-store',signal:controller.signal}).then(async r=>{if(!r.ok)throw Error('Customer service is unavailable');setConfig(await r.json())}).catch(e=>{if(e.name!=='AbortError')setError(e.message)});
+  return()=>controller.abort();
+ },[]);
+ useEffect(()=>{
+  let cancelled=false;let timer:ReturnType<typeof setTimeout>|undefined;const controller=new AbortController();
+  async function refresh(){
+   try{
+    const r=await fetch('api/executions',{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('Message status is unavailable');
+    const nextJobs=(await r.json()).executions as Job[];if(cancelled)return;setJobs(nextJobs);
+    const selected=nextJobs.find(j=>j.id===jobId);
+    if(selected?.traceId){
+     const from=new Date(Date.parse(selected.createdAt)-60_000),to=new Date(selected.finishedAt?Date.parse(selected.finishedAt)+60_000:Date.now());
+     try{const response=await fetch('api/telemetry?'+new URLSearchParams({from:from.toISOString(),to:to.toISOString()}),{cache:'no-store',signal:controller.signal});
+     if(response.ok){const capture=parseCloudCapture(await response.json());if(!cancelled)setSpans(capture.spans.filter(s=>s.traceId===selected.traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime)))}
+     }catch{/* Trace collection must not stop message-status updates. */}
+     if(!isActive(selected.state)&&!cancelled)refreshRef.current();
+    }
+    if(!cancelled&&nextJobs.some(j=>isActive(j.state)))timer=setTimeout(()=>void refresh(),4000);
+   }catch(e){if(!cancelled)setError((e as Error).message)}
+  }
+  void refresh();return()=>{cancelled=true;controller.abort();clearTimeout(timer)};
+ },[jobId]);
  async function launch(){
-  if(!scenario||!prompt.trim()||launching||!config?.enabled||isActive(job?.state))return;const sentPrompt=prompt;setLaunching(true);setError('');setSubmittedPrompt(prompt.trim());setTab('Conversation');
-  if(!request.current)request.current={scenario:scenario.id,idempotencyKey:crypto.randomUUID()};
-  try{const r=await fetch('api/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.current),signal:AbortSignal.timeout(15000)});const body=await r.json();if(!r.ok)throw Error(body.error||'Run launch rejected');setJobId(body.id);setPromptJobId(body.id);setPrompt(current=>current===sentPrompt?'':current);setSpans([]);request.current=null;await load()}
-  catch(e){setError((e as Error).message)}finally{setLaunching(false)}
+  if(!prompt.trim()||busy.current||!config?.chatEnabled||isActive(job?.state))return;
+  const sentPrompt=prompt,parentId=job?.kind==='chat'&&job.state==='completed'&&job.answer?job.id:undefined;busy.current=true;setLaunching(true);setError('');setTab('Conversation');
+  if(!request.current||request.current.message!==sentPrompt||request.current.parentId!==parentId)request.current={message:sentPrompt,parentId,idempotencyKey:crypto.randomUUID()};
+  try{
+   const r=await fetch('api/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.current),signal:AbortSignal.timeout(15000)});const body=await r.json();if(!r.ok)throw Error(body.error||'Message rejected');
+   setJobs(current=>[body,...current.filter(j=>j.id!==body.id)]);setJobId(body.id);setPrompt(current=>current===sentPrompt?'':current);setSpans([]);request.current=null;
+  }catch(e){setError((e as Error).message)}finally{setLaunching(false);busy.current=false}
  }
- const visible=spans.filter(s=>s.traceId===traceId||(!job&&s.traceId===REFERENCE_TRACE));
+ const visible=spans.filter(s=>s.traceId===traceId);
  const toolSpans=visible.filter(s=>s.operation==='execute_tool'||s.tool);
 
  return <section className="judge-journey judge-chat-shell">
@@ -85,24 +84,26 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
    <button className="chat-new" onClick={()=>{setJobId('');setPrompt('');setSpans([]);setTab('Conversation')}}><AddRounded/>New chat</button>
    <label className="chat-search"><SearchRounded/><input aria-label="Search conversations" placeholder="Search chats" value={search} onChange={e=>setSearch(e.target.value)}/></label>
    <p className="chat-history-label">Recent</p>
-   <div className="chat-history-list">{jobs.filter(j=>`${j.runId} ${j.scenario}`.toLowerCase().includes(search.toLowerCase())).map(j=><button key={j.id} aria-pressed={j.id===jobId} onClick={()=>{setJobId(j.id);setSpans([]);setTab('Conversation')}}><ChatBubbleOutlineRounded/><span><b>{config?.scenarios.find(s=>s.id===j.scenario)?.title||j.scenario}</b><small>{j.state} · {new Date(j.createdAt).toLocaleDateString()}</small></span></button>)}{!jobs.length&&<p className="chat-history-empty">Your investigations will appear here.</p>}</div>
+   <div className="chat-history-list">{jobs.filter(j=>!jobs.some(child=>child.parentId===j.id)).filter(j=>`${j.runId} ${j.userMessage||j.scenario}`.toLowerCase().includes(search.toLowerCase())).map(j=><button key={j.id} aria-pressed={j.id===jobId} onClick={()=>{setJobId(j.id);setSpans([]);setTab('Conversation')}}><ChatBubbleOutlineRounded/><span><b>{j.userMessage||config?.scenarios.find(s=>s.id===j.scenario)?.title||j.scenario}</b><small>{j.state} · {new Date(j.createdAt).toLocaleDateString()}</small></span></button>)}{!jobs.length&&<p className="chat-history-empty">Your investigations will appear here.</p>}</div>
    <div className="chat-history-footer"><ChatBubbleOutlineRounded aria-hidden="true"/><span>Customer service agent<small>Team Alpha workspace</small></span></div>
   </aside>
   <div className="chat-workspace">
    <header className="chat-topbar"><div><strong>{job?'Service investigation':'Alpha assistant'}</strong>{job&&<span className="chat-status">{job.state}</span>}</div><div className="chat-view-tabs"><button aria-pressed={tab==='Conversation'} onClick={()=>setTab('Conversation')}>Conversation</button>{job&&<button aria-pressed={tab==='Trace & controls'} onClick={()=>setTab('Trace & controls')}>Trace & controls</button>}</div></header>
    {error&&<Alert severity="warning">{error}</Alert>}
    {tab==='Conversation'?<div className={`chat-conversation ${job?'has-conversation':'is-empty'}`}>
-    {!job?<div className="chat-welcome"><span className="chat-welcome-eyebrow">TEAM ALPHA</span><h1>Let’s investigate together.</h1><p>Your customer, IT and network agents. One conversation.</p></div>:<div className="chat-transcript">
-     <div className="chat-user-message">{job.id===promptJobId?submittedPrompt:`Investigate ${config?.scenarios.find(s=>s.id===job.scenario)?.title||job.scenario}.`}</div>
+    {!job?<div className="chat-welcome"><span className="chat-welcome-eyebrow">TEAM ALPHA</span><h1>Let’s investigate together.</h1><p>Talk to your customer service agent about a service issue.</p></div>:<div className="chat-transcript">
+     {job.history?.map((turn,index)=><div key={index} className={turn.role==='user'?'chat-user-message':'chat-answer'}>{turn.content}</div>)}
+     <div className="chat-user-message">{job.userMessage||`Investigate ${config?.scenarios.find(s=>s.id===job.scenario)?.title||job.scenario}.`}</div>
      <div className="chat-agent-heading"><ChatBubbleOutlineRounded aria-hidden="true"/><b>Alpha assistant</b></div>
-     {isActive(job.state)?<div className="chat-processing"><ThinkingState/><span>Gathering evidence · {job.state}</span></div>:<StreamingText text={`This investigation is ${job.state}. Review the recorded tool activity and the trace evidence below.`}/>}
+     {job.answer&&<div className="chat-answer">{job.answer}</div>}
+     {isActive(job.state)?<div className="chat-processing"><ThinkingState/><span>Gathering evidence · {job.state}</span></div>:!job.answer&&<p>{job.kind==='chat'?'No agent answer was returned.':'Saved scenario execution. No chat message was sent for this run.'}</p>}
      <details className="chat-activity" open={isActive(job.state)}><summary>Agent activity <span>{toolSpans.length} recorded tool calls</span></summary><div className="journey-events">{toolSpans.length?toolSpans.map(s=><AgentEvent key={s.traceId+s.spanId} span={s}/>):<p>No tool spans loaded for this conversation yet.</p>}</div></details>
      {job.message&&<p className="chat-run-message">{job.message}</p>}
      {job.traceId&&<div className="chat-evidence-links"><Button onClick={()=>setTab('Trace & controls')}>Explore trace & controls</Button><Button component="a" href={CLOUDWATCH.replace(REFERENCE_TRACE,job.traceId)} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewOutlined/>}>CloudWatch</Button></div>}
     </div>}
-    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Ask Alpha about a service issue…" rows={2} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.enabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span className="chat-model" aria-label="Model: NVIDIA Nemotron Super 120B"><span className="chat-model-brand">NVIDIA</span><strong>Nemotron Super 120B</strong><span className="chat-model-label">Customer service</span></span><div className="chat-compose-actions"><VoiceInput value={prompt} onChange={setPrompt} disabled={launching||isActive(job?.state)}/><button type="submit" aria-label="Start investigation" disabled={launching||!config?.enabled||!scenario||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></div></form>
-    {!job&&<div className="chat-suggestions">{['Investigate fronthaul degradation','Check customer impact','Review network and digital twin'].map(label=><button key={label} onClick={()=>setPrompt(`${label}. Use the approved ${scenario?.title||'fronthaul degradation'} scenario and report the supporting evidence.`)}>{label}</button>)}</div>}
-    <p className="chat-compose-note">{scenario?`Runs the approved scenario: ${scenario.title}.`:(error?'Execution service unavailable.':'Connecting to the execution service…')} Evidence updates as it becomes available.</p></div>
+    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Ask Alpha about a service issue…" rows={2} maxLength={3000} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.chatEnabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span className="chat-model" aria-label="Model: NVIDIA Nemotron Super 120B"><span className="chat-model-brand">NVIDIA</span><strong>Nemotron Super 120B</strong><span className="chat-model-label">Customer service</span></span><div className="chat-compose-actions"><VoiceInput value={prompt} onChange={setPrompt} disabled={launching||isActive(job?.state)}/><button type="submit" aria-label="Send message" disabled={launching||!config?.chatEnabled||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></div></form>
+    {!job&&<div className="chat-suggestions">{['Investigate fronthaul degradation','Check customer impact','Review network and digital twin'].map(label=><button key={label} onClick={()=>setPrompt(`${label}. Ask me for any missing service or customer details.`)}>{label}</button>)}</div>}
+    <p className="chat-compose-note">{config?.chatEnabled?'Messages are sent to the customer service agent. Responses may take a moment.':(error?'Customer service unavailable.':'Connecting to customer service…')}</p></div>
    </div>:<div className="chat-inspector"><TraceControls spans={visible} selected={selectedSpan} onSelected={setSelectedSpan} run={matchedRun} job={job} onOpenRun={onOpenRun} onOpenControls={onOpenControls} onOpenTelemetry={onOpenTelemetry}/></div>}
   </div>
  </section>;

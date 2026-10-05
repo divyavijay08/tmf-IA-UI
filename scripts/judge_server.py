@@ -32,7 +32,7 @@ class JudgeHandler(BaseHTTPRequestHandler):
             self._send(403, b'{"error":"Origin not allowed"}')
             return
         length = int(self.headers.get("Content-Length", "0"))
-        if length > 4096:
+        if length > 16384:
             self._send(413, b'{"error":"Request too large"}')
             return
         body = self.rfile.read(length) if length else None

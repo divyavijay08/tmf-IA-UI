@@ -33,3 +33,11 @@ Audit exports include the loaded assurance response, explicitly imported telemet
 `npm run build` regenerates `public/downloads/alpha-independent-reproduction.zip` from the current parser and evaluator. It includes no example bundle or precomputed results. The CLI checks C7, C9 and C16 using the same functions as the UI and rejects checksum mismatches.
 
 Historical captures live in `tests/fixtures`; retired screens, sample adapters and their tests live in `archive/legacy-ui`. Neither directory is served as a public asset or imported by the active application. The ServiceNow panel provides browser links and an unavailable current-status message until a governance connector supplies evidence.
+
+## Customer messages
+
+`POST /api/messages` accepts `message` (1–3000 characters), `idempotencyKey`, and an optional completed message `parentId`. It sends the exact initial message to the configured customer agent as `context.question`. Follow-ups include server-owned prior user/assistant turns. It does not select a fault scenario or automatically invoke IT/network agents. The isolated `chat_runner.py` context adapter reuses the governed runner's transport, timeouts, trace IDs, pinned thresholds and budget export, invoking only its customer role. It does not change deployed agent prompts or the scenario runner.
+
+The persisted job contains the real agent `answer`, disposition and HTTP status; process exit alone is insufficient for a completed chat. History survives reloads. `GET /api/executions` remains a status/history endpoint, used while jobs are active; configuration loads once. Answers arrive when the agent returns (not a token stream). The UI shows only recorded tool spans. Legacy scenario runs are labelled as such.
+
+Messages and answers are retained in the existing restricted job/evidence store to support conversation history. This is the existing shared workshop workspace, not a private per-user messaging service.

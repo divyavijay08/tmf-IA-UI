@@ -20,24 +20,34 @@ class Runtime:
     job.update(state='interrupted',message='Service restarted. Runtime sessions may still be active; inspect before launching again.',finishedAt=now());save(path,job)
  def catalog(self):
   config=self.config;data=read(config['data']);threshold=read(config['threshold'])
-  return {'scenarios':[{'id':s['id'],'title':s.get('title',s['id'])} for s in data['fault_scenarios']], 'threshold':{'version':threshold.get('version'),'declaredAt':threshold.get('declared_at')},'actors':config['actors'],'enabled':bool(config.get('executionEnabled'))}
+  return {'scenarios':[{'id':s['id'],'title':s.get('title',s['id'])} for s in data['fault_scenarios']], 'threshold':{'version':threshold.get('version'),'declaredAt':threshold.get('declared_at')},'actors':config['actors'],'enabled':bool(config.get('executionEnabled')),'chatEnabled':bool(config.get('executionEnabled'))}
  def jobs(self):
   result=[]
   for path in self.root.glob('*/job.json'):
    job=read(path);start=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner-start.json');finish=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner.json')
    sessions=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'sessions.json') or [];job['invokedAgents']=[s.get('actor') for s in sessions if s.get('actor')];job['traceId']=start.get('trace_id');job['completedAgents']=len(finish.get('results',[]));job['workflowCompletedAt']=finish.get('completed_at');result.append(job)
   return sorted(result,key=lambda j:j['createdAt'],reverse=True)[:100]
- def launch(self,scenario,key):
-  if not re.fullmatch('[a-zA-Z0-9_-]{16,80}',key or ''):raise ValueError('A valid idempotency key is required')
+ def chat(self,message,key,parent=None):
+  if not isinstance(message,str) or not message.strip() or len(message)>3000:raise ValueError('Message must contain 1–3000 characters')
+  if parent is not None and (not isinstance(parent,str) or not re.fullmatch('[a-f0-9]{24}',parent)):raise ValueError('Invalid parent message')
+  history=[]
+  if parent:
+   previous=next((j for j in self.jobs() if j['id']==parent),None)
+   if not previous or previous.get('kind')!='chat' or previous['state']!='completed' or not previous.get('answer'):raise ValueError('Previous message has no completed answer')
+   history=previous.get('history',[])+[{'role':'user','content':previous['userMessage']},{'role':'assistant','content':previous['answer']}]
+   if len(json.dumps(history))+len(message)>20000:raise ValueError('Conversation is full; start a new chat')
+  return self.launch('chat-message',key,{'kind':'chat','userMessage':message,'parentId':parent,'history':history})
+ def launch(self,scenario,key,chat=None):
+  if not isinstance(key,str) or not re.fullmatch('[a-zA-Z0-9_-]{16,80}',key):raise ValueError('A valid idempotency key is required')
   with self.lock:
    jobid=hashlib.sha256(key.encode()).hexdigest()[:24];directory=self.root/jobid;path=directory/'job.json'
    if path.exists():
     job=read(path)
-    if job['scenario']!=scenario:raise ValueError('Launch key already belongs to another scenario')
+    if job['scenario']!=scenario or job.get('userMessage')!=(chat or {}).get('userMessage') or job.get('parentId')!=(chat or {}).get('parentId'):raise ValueError('Launch key already belongs to another scenario')
     return job
    if not self.config.get('executionEnabled'):raise RuntimeError('Run execution is disabled')
    if any(j['state'] in ('queued','running','collecting','interrupted') for j in self.jobs()):raise RuntimeError('Another execution is active or requires review')
-   if scenario not in [s['id'] for s in self.catalog()['scenarios']]:raise ValueError('Unknown scenario')
+   if not chat and scenario not in [s['id'] for s in self.catalog()['scenarios']]:raise ValueError('Unknown scenario')
    directory.mkdir(mode=0o700);runid='ui-'+uuid.uuid4().hex
    # Copy the actual declared configuration before dispatch. Never synthesize thresholds.
    for keyname in ('data','threshold','register'):
@@ -45,14 +55,23 @@ class Runtime:
    threshold=read(directory/'threshold')
    if millis(threshold['declared_at'])>millis(now()):raise ValueError('Threshold declaration is in the future')
    job={'id':jobid,'runId':runid,'scenario':scenario,'state':'queued','createdAt':now(),'thresholdVersion':threshold['version'],'thresholdDigest':hashlib.sha256((directory/'threshold').read_bytes()).hexdigest()}
+   if chat:
+    job.update(chat);save(directory/'chat-request.json',{'message':chat['userMessage'],'history':chat['history']});save(directory/'data',{'fault_scenarios':[{'id':'chat-message','title':'Customer message','symptoms':{}}]})
    save(path,job);threading.Thread(target=self.execute,args=(directory,job),daemon=True).start();return job
  def execute(self,directory,job):
   config=self.config;path=directory/'job.json'
   command=['python3','-m','tools.control7.runner',job['scenario'],'--data',str(directory/'data'),'--threshold',str(directory/'threshold'),'--register',str(directory/'register'),'--evidence',config['evidence'],'--run-id',job['runId'],'--actors',','.join(k+'='+v for k,v in config['actors'].items()),'--budget-export']
+  if job.get('kind')=='chat':
+   command=['python3',str(Path(__file__).with_name('chat_runner.py')),str(directory/'chat-request.json')]+command[3:]+['--roles','customer']
   job.update(state='running',startedAt=now());save(path,job)
   try:
    with (directory/'runner.log').open('w') as log:
-    result=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=1800)
+    result=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=1800,env=dict(os.environ,PYTHONPATH=config['repository']))
+   if job.get('kind')=='chat':
+    response_path=Path(config['evidence'])/'runs'/job['runId']/('console-'+config['actors']['customer']+'.txt')
+    try:
+     response=json.loads(response_path.read_text());job['answer']=response.get('answer','');job['disposition']=response.get('disposition');job['agentHttpStatus']=response.get('http_status')
+    except (OSError,ValueError):job['answer']=''
    job['exitCode']=result.returncode;job.update(state='collecting');save(path,job)
    # The configured collector is a fixed administrator-owned argv, never browser input.
    if config.get('collector'):
@@ -61,6 +80,9 @@ class Runtime:
      collected=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=600,env=dict(os.environ,ALPHA_EVIDENCE=config['evidence'],ALPHA_REGISTER=str(directory/'register')))
     job['collectionExitCode']=collected.returncode
    job.update(state='completed' if result.returncode==0 and job.get('collectionExitCode',1)==0 else 'failed',message='Process outcomes recorded. Control results and business completion require evidence.',finishedAt=now())
+   if job.get('kind')=='chat':
+    answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
+    job.update(state='completed' if answered else 'failed',message=('Customer service agent replied.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Customer service agent did not return a successful answer.')
   except subprocess.TimeoutExpired:job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
   except Exception:job.update(state='failed',message='Runner or collector failed. Inspect server-side execution logs.',finishedAt=now())
   save(path,job)
@@ -90,12 +112,15 @@ class Handler(BaseHTTPRequestHandler):
   origin=self.headers.get('Origin')
   if origin and origin not in self.server.runtime.config.get('origins',[]):self.respond(403,{'error':'Origin not allowed'});return
   if self.headers.get('Content-Type','').split(';')[0]!='application/json':self.respond(415,{'error':'JSON required'});return
-  if not urlparse(self.path).path.endswith('/api/executions'):self.respond(404,{'error':'Endpoint unavailable'});return
+  if not urlparse(self.path).path.endswith(('/api/executions','/api/messages')):self.respond(404,{'error':'Endpoint unavailable'});return
   try:
    size=int(self.headers.get('Content-Length','0'))
-   if size<1 or size>4096:raise ValueError('Invalid request size')
-   data=json.loads(self.rfile.read(size));job=self.server.runtime.launch(data.get('scenario'),data.get('idempotencyKey'));self.respond(202,job)
-  except (ValueError,TypeError):self.respond(400,{'error':'Invalid scenario or launch key'})
+   if size<1 or size>16384:raise ValueError('Invalid request size')
+   data=json.loads(self.rfile.read(size))
+   if not isinstance(data,dict):raise ValueError('JSON object required')
+   job=self.server.runtime.chat(data.get('message'),data.get('idempotencyKey'),data.get('parentId')) if urlparse(self.path).path.endswith('/api/messages') else self.server.runtime.launch(data.get('scenario'),data.get('idempotencyKey'))
+   self.respond(202,job)
+  except (ValueError,TypeError) as e:self.respond(400,{'error':str(e) or 'Invalid request'})
   except RuntimeError as e:self.respond(409,{'error':str(e)})
   except OSError:self.respond(503,{'error':'Execution configuration unavailable'})
  def log_message(self,*args):pass
