@@ -516,3 +516,5 @@ html[data-theme="dark"] .wa-app .viz-failures i {background:var(--status-breach)
  .wa-page-size {margin-right:0}
  .wa-page-number {display:none}
 }
+
+.wa-app .journey-chat>header h2{flex:0 1 auto}
