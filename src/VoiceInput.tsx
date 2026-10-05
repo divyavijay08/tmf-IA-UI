@@ -12,6 +12,7 @@ type VoiceWindow=Window & {SpeechRecognition?:new()=>Recognition;webkitSpeechRec
 export function VoiceInput({value,onChange,disabled}:{value:string;onChange:(value:string)=>void;disabled:boolean}){
  const [listening,setListening]=useState(false),[message,setMessage]=useState('');
  const recognition=useRef<Recognition|null>(null);
+ useEffect(()=>{if(!message)return;const timer=setTimeout(()=>setMessage(''),5000);return()=>clearTimeout(timer)},[message]);
  const supported=!!((window as VoiceWindow).SpeechRecognition||(window as VoiceWindow).webkitSpeechRecognition);
  useEffect(()=>()=>{const active=recognition.current;if(active){active.onend=null;active.onresult=null;active.onerror=null;active.abort()}},[]);
  useEffect(()=>{if(disabled)recognition.current?.stop()},[disabled]);
