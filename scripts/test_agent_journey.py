@@ -20,6 +20,9 @@ class JourneyTests(unittest.TestCase):
    for prior in list(findings)[:i]:self.assertIn('Evidence from '+prior,context['question'])
   self.assertEqual(answer['answer'],'Evidence from customer-reply')
   self.assertEqual([e[3] for e in self.events],['running','completed']*6)
+ def test_initial_user_message_is_not_rewritten(self):
+  run_journey('Exact customer request',[],self.actors,'run','trace',self.invoke,lambda *e:None)
+  self.assertEqual(self.calls[0][2]['context']['question'],'Exact customer request')
  def test_governed_failure_stops_downstream_calls(self):
   def invoke(stage,role,body):
    r=self.invoke(stage,role,body)

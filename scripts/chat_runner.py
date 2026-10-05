@@ -57,7 +57,7 @@ def main(argv=None):
         else:step['finishedAt']=now()
         if response:
             if response.get('error'):step['error']=response['error']
-            else:
+            if response.get('answer'):
                 step.update(answer=response.get('answer'),disposition=response.get('disposition'),invocationId=response.get('invocation_id'))
                 records=response.get('call_records') or response.get('transport_attempts') or []
                 step['toolCalls']=[{k:a[k] for k in ('tool_name','request_tool_name','outcome','event_id','attempt_id','http_status','duration_ms') if k in a} for a in records if a.get('kind')=='tool']
