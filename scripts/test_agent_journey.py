@@ -13,13 +13,13 @@ class JourneyTests(unittest.TestCase):
   return run_journey('Check SITE-DEN-12',[{'role':'user','content':'A prior question'}],self.actors,'run','trace',invoke or self.invoke,lambda *event:self.events.append(event))
  def test_full_journey_passes_evidence_and_returns_customer_synthesis(self):
   answer,findings=self.run_flow()
-  self.assertEqual([c[1] for c in self.calls],['customer','it','network','it','network','customer'])
+  self.assertEqual([c[1] for c in self.calls],['customer','it','network','customer'])
   for i,(stage,role,body) in enumerate(self.calls):
    context=body['context'];self.assertIn('Check SITE-DEN-12',context['question'])
    self.assertEqual(len(context['upstream_evidence']),i)
    for prior in list(findings)[:i]:self.assertIn('Evidence from '+prior,context['question'])
   self.assertEqual(answer['answer'],'Evidence from customer-reply')
-  self.assertEqual([e[3] for e in self.events],['running','completed']*6)
+  self.assertEqual([e[3] for e in self.events],['running','completed']*3+['not-required']*2+['running','completed'])
  def test_initial_user_message_is_not_rewritten(self):
   run_journey('Exact customer request',[],self.actors,'run','trace',self.invoke,lambda *e:None)
   self.assertEqual(self.calls[0][2]['context']['question'],'Exact customer request')

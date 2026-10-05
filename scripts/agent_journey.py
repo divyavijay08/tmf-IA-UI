@@ -44,6 +44,9 @@ def run_journey(message, history, actors, cid, trace, invoke, emit):
     findings={}
     network=None
     for stage, role, title in STAGES:
+        if stage in ('it-review','network-finalisation') and network and network.get('disposition')!='pending-negotiation':
+            emit(stage,role,title,'not-required',None)
+            continue
         emit(stage,role,title,'running',None)
         context={'phase':stage,'customer_request':message,'conversation_history':history,
                  'upstream_evidence':{k:evidence_view(v) for k,v in findings.items()}}

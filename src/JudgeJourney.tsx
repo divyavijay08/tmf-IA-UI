@@ -133,6 +133,7 @@ function TraceControls({spans,selected,onSelected,run,job,onOpenRun,onOpenContro
 }
 
 function JourneyActivity({stages}:{stages:JourneyStage[]}){
+ stages=stages.filter(s=>s.state!=='not-required');
  const done=stages.filter(s=>s.state==='completed').length;
  return <section className="chat-journey" aria-label="Investigation journey"><header><strong>Investigation journey</strong><span>{done}/{stages.length} stages complete</span></header>
  <ol>{stages.map(step=><li key={step.id} data-state={step.state}><span className="chat-stage-marker" aria-hidden="true">{step.state==='completed'?'✓':step.state==='failed'?'!':'·'}</span><div><details><summary><strong>{step.title}</strong><span>{step.state.replace('-',' ')}</span></summary><p>{step.answer||step.error||(step.state==='running'?'Waiting for the governed agent response.':'This stage has not run.')}</p>{!!step.toolCalls?.length&&<ul className="chat-stage-tools">{step.toolCalls.map((call,i)=><li key={call.attempt_id||i}><code>{call.tool_name||call.request_tool_name||'Tool call'}</code><span>{call.outcome||'Recorded'}</span></li>)}</ul>}</details>{step.state==='running'&&<small>Working with {step.role==='it'?'IT':step.role} agent</small>}</div></li>)}</ol></section>;

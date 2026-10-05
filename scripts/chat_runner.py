@@ -61,6 +61,8 @@ def main(argv=None):
                 step.update(answer=response.get('answer'),disposition=response.get('disposition'),invocationId=response.get('invocation_id'))
                 records=response.get('call_records') or response.get('transport_attempts') or []
                 step['toolCalls']=[{k:a[k] for k in ('tool_name','request_tool_name','outcome','event_id','attempt_id','http_status','duration_ms') if k in a} for a in records if a.get('kind')=='tool']
+        if state=='not-required':
+            manifest['results'].append(dict(invocation_id=cid+':'+stage,actor=actors[role],not_started=True,captured=False,disposition='not-started',refused_by={'reason':'Agent returned no pending negotiation proposal'}))
         save(root/'journey.json',progress)
     save(root/'journey.json',progress)
     def invoke(stage,role,body):
