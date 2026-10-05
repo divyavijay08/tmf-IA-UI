@@ -6,6 +6,7 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded';
 import {ThinkingState} from './aicss/ThinkingState';
 import './judge-chat.css';
+import {VoiceInput} from './VoiceInput';
 import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import type {AssuranceData,AssuranceRun} from './assuranceData';
@@ -70,9 +71,9 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
  }
  useEffect(()=>{void load();const timer=setInterval(()=>{if(!document.hidden)void load()},4000);return()=>clearInterval(timer)},[jobId]);
  async function launch(){
-  if(!scenario||!prompt.trim())return;setLaunching(true);setError('');setSubmittedPrompt(prompt.trim());setTab('Conversation');
+  if(!scenario||!prompt.trim()||launching||!config?.enabled||isActive(job?.state))return;const sentPrompt=prompt;setLaunching(true);setError('');setSubmittedPrompt(prompt.trim());setTab('Conversation');
   if(!request.current)request.current={scenario:scenario.id,idempotencyKey:crypto.randomUUID()};
-  try{const r=await fetch('api/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.current),signal:AbortSignal.timeout(15000)});const body=await r.json();if(!r.ok)throw Error(body.error||'Run launch rejected');setJobId(body.id);setPromptJobId(body.id);setSpans([]);request.current=null;await load()}
+  try{const r=await fetch('api/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.current),signal:AbortSignal.timeout(15000)});const body=await r.json();if(!r.ok)throw Error(body.error||'Run launch rejected');setJobId(body.id);setPromptJobId(body.id);setPrompt(current=>current===sentPrompt?'':current);setSpans([]);request.current=null;await load()}
   catch(e){setError((e as Error).message)}finally{setLaunching(false)}
  }
  const visible=spans.filter(s=>s.traceId===traceId||(!job&&s.traceId===REFERENCE_TRACE));
@@ -99,7 +100,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
      {job.message&&<p className="chat-run-message">{job.message}</p>}
      {job.traceId&&<div className="chat-evidence-links"><Button onClick={()=>setTab('Trace & controls')}>Explore trace & controls</Button><Button component="a" href={CLOUDWATCH.replace(REFERENCE_TRACE,job.traceId)} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewOutlined/>}>CloudWatch</Button></div>}
     </div>}
-    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Describe the service issue…" rows={2} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.enabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span>Customer service <span className="chat-model" aria-label="Model: NVIDIA nemotron-super-120b"><span className="chat-model-label">Model</span> NVIDIA · nemotron-super-120b</span></span><button type="submit" aria-label="Start investigation" disabled={launching||!config?.enabled||!scenario||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></form>
+    <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Describe the service issue…" rows={2} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.enabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span className="chat-model" aria-label="Model: NVIDIA Nemotron Super 120B"><span className="chat-model-brand">NVIDIA</span><strong>Nemotron Super 120B</strong><span className="chat-model-label">Customer service</span></span><div className="chat-compose-actions"><VoiceInput value={prompt} onChange={setPrompt} disabled={launching||isActive(job?.state)}/><button type="submit" aria-label="Start investigation" disabled={launching||!config?.enabled||!scenario||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></div></form>
     {!job&&<div className="chat-suggestions">{['Investigate fronthaul degradation','Check customer impact','Review network and digital twin'].map(label=><button key={label} onClick={()=>setPrompt(`${label}. Use the approved ${scenario?.title||'fronthaul degradation'} scenario and report the supporting evidence.`)}>{label}</button>)}</div>}
     <p className="chat-compose-note">{scenario?`Runs the approved scenario: ${scenario.title}.`:(error?'Execution service unavailable.':'Connecting to the execution service…')} Evidence updates as it becomes available.</p></div>
    </div>:<div className="chat-inspector"><TraceControls spans={visible} selected={selectedSpan} onSelected={setSelectedSpan} run={matchedRun} job={job} onOpenRun={onOpenRun} onOpenControls={onOpenControls} onOpenTelemetry={onOpenTelemetry}/></div>}
