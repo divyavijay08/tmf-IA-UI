@@ -49,13 +49,14 @@ export function RegisterPanel({run,control}:{run:AssuranceRun;control:string}){
  const procedure=control==='7'?'Reconcile expected actions; measure gaps between unique eligible event timestamps':control==='16'?'Deduplicate leaf calls and retries; reconcile expected inventory; sum input + output tokens':'Compare scored windows to dated baseline';
  const groups:[string,[string,unknown][]][]=[
   ['Ownership & scope', [['Owner',t.owner],['Applicable scope',t.scope??t.metric],['Instrument / obligation',t.instrument??t.obligation]]],
-  ['Version & timing', [['Version',t.version],['Effective / declared at (UTC)',formatUTCDateTime(t.effective_at??t.declared_at)],['Version date',formatUTCDate(t.version_date)],['Test frequency',t.frequency]]],
+  ['Version & timing', [['Version',t.version],['Effective / declared at (UTC)',(t.effective_at??t.declared_at)==null?null:formatUTCDateTime(t.effective_at??t.declared_at)],['Version date',t.version_date==null?null:formatUTCDate(t.version_date)],['Test frequency',t.frequency]]],
   ['Enforcement & tolerance', [['Allowed exception rate',t.exception_tolerance??t.allowed_exception_rate],['Enforcement point',t.enforcement_point],['Declared budget mode',run.budget.mode],['Rationale',t.why_this_value]]]
  ];
  const missing=groups.flatMap(([,fields])=>fields).filter(([,v])=>v==null).length;
  return <section className="wa-panel hx-control-definition">
   <header><h2>Control definition & ownership</h2><span>{missing} fields not recorded</span></header>
   <div className="control-intro"><span className="control-number">Control {control}</span><div><h3>{objective}</h3><p>{statement}</p></div></div>
+  {missing>0&&<p className="control-field-note" style={{padding:"0 20px"}}>These fields come from the versioned control definition attached to this run. Runtime spans do not supply policy ownership, thresholds or assessment results.</p>}
   <div className="control-field-groups">{groups.map(([title,fields])=><section key={title}><h3>{title}</h3><dl>{fields.map(([label,v])=><div key={label}><dt>{label}</dt><dd className={v==null?'is-missing':undefined}>{fmt(v)}</dd></div>)}</dl>{title==='Version & timing'&&<p className="control-field-note">Version date is not an exact effective time.</p>}{title==='Enforcement & tolerance'&&<p className="control-field-note">Declared mode does not prove enforcement.</p>}</section>)}</div>
   <div className="control-procedure"><span>Procedure</span><p>{procedure}</p></div>
  {control==='7'&&<div className="hx-result"><span>Eligible gaps <b>{fmt(run.c7.gap_count)}</b></span><span>Max gap <b>{fmt(run.c7.max_gap_ms)} ms</b></span><span>Gap limit <b>{fmt(run.c7.gap_limit_ms)} ms</b></span><span>Violations <b>{fmt(run.c7.gap_violations?.length)}</b></span><span>Timing result <b>{fmt(run.c7.timing_verdict)}</b></span></div>}</section>

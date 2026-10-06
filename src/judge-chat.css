@@ -70,8 +70,8 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
   padding:24px;
 }
 .chat-workspace:has(.chat-inspector) .chat-topbar strong {font-size:16px;font-weight:600}
-.chat-workspace:has(.chat-inspector) .chat-view-tabs button {font-size:13px;padding:9px 14px}
-.chat-workspace:has(.chat-inspector) .chat-view-tabs button[aria-pressed=true] {background:var(--selected);color:var(--primary)}
+.judge-chat-shell .chat-topbar .chat-view-tabs button {font-size:13px;padding:9px 14px}
+.judge-chat-shell .chat-topbar .chat-view-tabs button[aria-pressed=true] {background:var(--selected);color:var(--primary)}
 .chat-trace-status {padding:16px 24px;gap:24px}
 .chat-trace-status strong {font-size:13px;font-weight:600;line-height:1.6}
 .chat-trace-status small {font-size:12px;line-height:1.65;max-width:1000px}

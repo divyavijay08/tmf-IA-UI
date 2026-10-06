@@ -9,7 +9,7 @@ CONTENT = ('answer', 'findings', 'evidence_references', 'unresolved_issues', 'li
 STAGE_FIELDS = ('stage', 'role', 'actor', 'status', 'reason', 'invoked', 'invocation_id',
                 'routing_reason', 'started_at', 'completed_at', 'error_type')
 CALL_FIELDS = ('actor', 'attempt_id', 'logical_call_id', 'invocation_id', 'run_id', 'trace_id',
-               'action_id', 'kind', 'outcome', 'http_status', 'ts', 'started_at',
+               'action_id', 'kind', 'outcome', 'http_status', 'ts', 'started_at', 'error', 'authorization',
                'completed_at', 'request_tool_name', 'threshold_version', 'response_truncated')
 
 
@@ -100,6 +100,9 @@ def load_workflow(root):
             raise ValueError('Invalid transport records')
         for index, attempt in enumerate(attempts):
             event = {k: attempt[k] for k in CALL_FIELDS if k in attempt}
+            asset = attempt.get('asset')
+            if isinstance(asset, dict):
+                event['asset'] = {k: asset[k] for k in ('kind', 'alias') if isinstance(asset.get(k), str)}
             usage = attempt.get('usage', {})
             if not isinstance(usage, dict):
                 raise ValueError('Invalid transport usage')

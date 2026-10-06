@@ -31,7 +31,7 @@ export default function PageHeader({section,title,description,source,readAt,busy
   <div className="workspace-context" aria-label="Evidence context">
    <span className="workspace-source">{source}</span>
    <span className="workspace-timestamp"><AccessTimeOutlined aria-hidden="true"/>{readAt?<><span>Read <time dateTime={readAt}>{formatUTCDateTime(readAt)}</time> UTC</span></>:<span>Awaiting evidence</span>}</span>
-   <Tooltip title="Control 9 is not assessed in the workshop evidence. A verdict cannot be established."><span className="workspace-assessment" tabIndex={0}><InfoOutlined aria-hidden="true"/>Control 9 · Not assessed</span></Tooltip>
+   <Tooltip title="Assessment results are shown for each run and control. Runtime activity alone does not establish a verdict."><span className="workspace-assessment" tabIndex={0}><InfoOutlined aria-hidden="true"/>Run-specific assessments</span></Tooltip>
   </div>
  </header>;
 }
