@@ -72,9 +72,9 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
   async function loadTrace(){
    try{
     const from=new Date(Date.parse(createdAt)-60_000),to=new Date(finishedAt?Date.parse(finishedAt)+60_000:Date.now());
-    const r=await fetch('api/telemetry?'+new URLSearchParams({from:from.toISOString(),to:to.toISOString()}),{cache:'no-store',signal:controller.signal});
+    const r=await fetch('api/conversation-trace?'+new URLSearchParams({traceId,from:from.toISOString(),to:to.toISOString()}),{cache:'no-store',signal:controller.signal});
     if(!r.ok)throw Error('Trace service is unavailable.');
-    if(!cancelled){const capture=parseCloudCapture(await r.json());const linked=capture.spans.filter(s=>s.traceId===traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime));setSpans(linked);setTraceNotice(capture.complete===false?'CloudWatch returned partial evidence.':linked.length?'':'No matching CloudWatch spans have arrived yet.');}
+    if(!cancelled){const capture=parseCloudCapture(await r.json());const linked=capture.spans.filter(s=>s.traceId===traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime));setSpans(linked);setTraceNotice((capture.complete===false?'Partial CloudWatch evidence. ':linked.length?'':'No matching spans have arrived yet. ')+capture.coverage);}
    }catch{if(!cancelled)setTraceNotice('CloudWatch evidence is unavailable. Recorded workflow stages remain visible.');}
    if(!cancelled&&(!finishedAt||Date.now()<Date.parse(finishedAt)+90_000))timer=setTimeout(()=>void loadTrace(),15000);
   }

@@ -70,6 +70,14 @@ Workflow status is separate from business outcome and control assessment.
 Workflow C7/C9/C16 verdicts remain not assessed until the backend's control
 integration supplies validated combined assessments. No thresholds, security
 controls, runtime configuration or backend teammate files are changed by this
-frontend deployment. The new AWS span API was inspected; chat retains the
-existing same-origin authenticated telemetry adapter, without exposing a new
-listener or credentials.
+frontend deployment. The teammate span API is consumed through the same-origin UI proxy, without
+exposing a new listener or credentials.
+
+The conversation trace panel now uses `GET /api/conversation-trace` on the same
+UI server. It accepts only an exact trace ID already recorded in `/api/executions`
+and a bounded time window. The server calls the existing loopback span API on
+10196, follows its cursors, filters metadata, and returns the existing CloudCapture
+shape. Raw prompts/tool bodies/events are omitted. Source coverage and incomplete
+scans remain visible. The current source is `aws/spans` (gateway); this is not a
+claim of complete agent-runtime span coverage. Existing general telemetry remains
+available independently through `/api/telemetry`.

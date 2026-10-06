@@ -3,6 +3,7 @@
 import argparse
 import json
 import mimetypes
+from conversation_trace import collect as collect_trace, parameters as trace_parameters
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -69,6 +70,23 @@ class JudgeHandler(BaseHTTPRequestHandler):
         self._send(200, candidate.read_bytes(), content_type, cache)
 
     def do_GET(self):
+        if urlsplit(self.path).path == '/api/conversation-trace':
+            try:
+                _, _, trace_id = trace_parameters(urlsplit(self.path).query)
+                request = urllib.request.Request(self.server.target + '/api/executions',
+                    headers={'Authorization': 'Bearer ' + self.server.token})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    jobs = json.load(response)['executions']
+                if not any(job.get('traceId', '').lower() == trace_id for job in jobs if job.get('traceId')):
+                    self._send(404, b'{"error":"No conversation matches this trace"}')
+                    return
+                result = collect_trace(urlsplit(self.path).query, self.server.span_api)
+                self._send(200, json.dumps(result).encode())
+            except ValueError:
+                self._send(400, b'{"error":"Invalid trace query"}')
+            except Exception:
+                self._send(502, b'{"error":"Conversation trace service unavailable"}')
+            return
         self._proxy() if urlsplit(self.path).path.startswith("/api/") else self._static()
 
     def do_POST(self):
@@ -83,6 +101,7 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--token-file", required=True)
     parser.add_argument("--target", default="http://127.0.0.1:8767")
+    parser.add_argument("--span-api", default="http://127.0.0.1:10196")
     parser.add_argument("--origin", action="append", default=[])
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8768)
@@ -93,6 +112,7 @@ def main():
     server = ThreadingHTTPServer((args.host, args.port), JudgeHandler)
     server.root = Path(args.root)
     server.target = args.target.rstrip("/")
+    server.span_api = args.span_api
     server.token = token
     server.origins = set(args.origin)
     server.serve_forever()
