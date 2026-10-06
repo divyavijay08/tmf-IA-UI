@@ -1,3 +1,4 @@
+import {evidenceFields} from './recordedEvidence';
 import {MetricCard,type MetricIcon} from './MetricCard';
 import {statusClass} from './controlQuery';
 import type {AssuranceRun} from './assuranceData';
@@ -11,7 +12,8 @@ export function SupportingEvidence({run,control}:{run:AssuranceRun;control:strin
  return <section className="wa-panel supporting-evidence">
   <header><h2>Control {control} · Supporting evidence</h2><span className={`wa-badge ${statusClass(report.verdict)}`}>{statusClass(report.verdict)==='good'?'✓ ':''}{report.verdict??'Not assessed'}</span></header>
   {control==='9'?<div className="supporting-empty"><strong>No workshop evaluation</strong><p>A verdict for Control 9 cannot be established from this evidence.</p></div>:<div className="supporting-body">
-   <div className="wa-statstrip supporting-metrics">{Object.entries(fields).map(([label,value],index)=><MetricCard key={label} label={label} value={display(value)} icon={(['records','budget','verified','records'] as MetricIcon[])[index]}/>)}</div>
+   {!evidenceFields(fields).length&&<p>No assessed measurements are attached to this run. See the independent query for available records and evidence gaps.</p>}
+   <div className="wa-statstrip supporting-metrics">{evidenceFields(fields).map(([label,value],index)=><MetricCard key={label} label={label} value={display(value)} icon={(['records','budget','verified','records'] as MetricIcon[])[index]}/>)}</div>
    {notes.length>0&&<div className="supporting-notes"><h3>Evaluator notes <span>{notes.length}</span></h3><ul>{notes.map((note,index)=><li key={index}>{display(note)}</li>)}</ul></div>}
    <div className="evidence-disclosures"><details><summary>Evaluator report <span>JSON</span></summary><pre>{JSON.stringify(report,null,2)}</pre></details></div>
   </div>}

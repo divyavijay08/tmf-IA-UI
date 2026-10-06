@@ -1,3 +1,4 @@
+import {hasEvidence,recordedModelUsage} from './recordedEvidence';
 import {makeSessionBundle} from './auditBundle';
 import {formatUTCDate,formatUTCDateTime} from './dateTime';
 import {DateTimeField} from './DateTimeField';
@@ -20,6 +21,7 @@ import {parseCloudCapture,type CloudCapture} from './cloudwatchData';
 const fmt=(v:any)=>v==null?'Not recorded':typeof v==='object'?JSON.stringify(v):String(v);
 export function QueryPanel({run,control='16',window}:{run:AssuranceRun;control?:string;window?:[number,number]}){
  const [result,setResult]=useState<ReturnType<typeof queryControl>|null>(null);const key=JSON.stringify([run,control,window]);const [checked,setChecked]=useState('');const current=checked===key?result:null;
+ const usage=recordedModelUsage(run.events);
  const display=(v:unknown)=>typeof v==='number'?v.toLocaleString():fmt(v);
  return <section className="wa-panel hx-query query-panel">
   <header><div className="query-heading"><h2>Independent control query</h2><span>{run.id} · Control {control}</span></div><Button variant="contained" startIcon={<ManageSearchOutlined/>} onClick={()=>{setResult(queryControl(run,control,window));setChecked(key)}}>Recompute evidence</Button></header>
@@ -27,12 +29,13 @@ export function QueryPanel({run,control='16',window}:{run:AssuranceRun;control?:
    <div className="query-body">
     <div className="query-verdict"><span className={`wa-badge ${statusClass(current.verdict)}`}>{current.verdict}</span><span>Recomputed from exported evidence</span></div>
     <div className="wa-statstrip query-metrics">
-     <MetricCard label={control==='16'?'Measured tokens':'Measured'} value={display(current.measurement)} icon="records"/>
-     <MetricCard label={control==='16'?'Token limit':'Limit'} value={display(current.limit)} icon="budget"/>
-     <MetricCard label="Coverage" value={current.coverage==null?'Unknown':`${(current.coverage*100).toFixed(1)}%`} icon="verified"/>
-     <MetricCard label="Exception rate" value={current.exceptionRate==null?'Unknown':`${current.exceptionRate*100}%`} icon="failures"/>
+     {hasEvidence(current.measurement)&&<MetricCard label={control==='16'?'Measured tokens':'Measured'} value={display(current.measurement)} icon="records"/>}
+     {hasEvidence(current.limit)&&<MetricCard label={control==='16'?'Token limit':'Limit'} value={display(current.limit)} icon="budget"/>}
+     {current.coverage!=null&&<MetricCard label="Coverage" value={`${(current.coverage*100).toFixed(1)}%`} icon="verified"/>}
+     {current.exceptionRate!=null&&<MetricCard label="Exception rate" value={`${current.exceptionRate*100}%`} icon="failures"/>}
     </div>
-    <div className="query-context"><div><h3>Evaluation scope</h3><p>{current.scope} · {control==='16'?`Window usage: ${display(current.windowMeasurement)} tokens. The full run cap is retained.`:`Maximum eligible gap: ${display(current.windowMeasurement)} ms; coverage denominator: ${current.denominator}.`}</p></div><div><h3>Enforcement evidence</h3><p>{current.enforcement}</p></div></div>
+    {control==='16'&&current.measurement==null&&usage&&<div className="query-recorded-usage"><strong>Recorded model usage · {usage.total.toLocaleString()} tokens</strong><p>{usage.calls} unique model attempts · {usage.input.toLocaleString()} input · {usage.output.toLocaleString()} output. Saved transport usage; completeness and spend-cap compliance have not been established.{usage.excluded>0&&` ${usage.excluded} incomplete or conflicting records excluded.`}</p></div>}
+    <div className="query-context"><div><h3>Evaluation scope</h3><p>{current.scope}{current.windowMeasurement!=null&&` · ${control==='16'?'Window usage':'Maximum eligible gap'}: ${display(current.windowMeasurement)} ${control==='16'?'tokens':'ms'}.`}</p></div><div><h3>Enforcement evidence</h3><p>{current.enforcement}</p></div></div>
     <div className="evidence-disclosures">
      {current.gaps.length>0&&<details><summary>Evidence gaps <span>{current.gaps.length}</span></summary><ul>{current.gaps.map(g=><li key={g}>{g}</li>)}</ul></details>}
      <details><summary>Supporting record IDs <span>{current.refs.length}</span></summary><pre>{JSON.stringify(current.refs,null,2)}</pre></details>
@@ -52,12 +55,13 @@ export function RegisterPanel({run,control}:{run:AssuranceRun;control:string}){
   ['Version & timing', [['Version',t.version],['Effective / declared at (UTC)',(t.effective_at??t.declared_at)==null?null:formatUTCDateTime(t.effective_at??t.declared_at)],['Version date',t.version_date==null?null:formatUTCDate(t.version_date)],['Test frequency',t.frequency]]],
   ['Enforcement & tolerance', [['Allowed exception rate',t.exception_tolerance??t.allowed_exception_rate],['Enforcement point',t.enforcement_point],['Declared budget mode',run.budget.mode],['Rationale',t.why_this_value]]]
  ];
- const missing=groups.flatMap(([,fields])=>fields).filter(([,v])=>v==null).length;
+ const populated=groups.map(([title,fields])=>[title,fields.filter(([,v])=>hasEvidence(v))] as [string,[string,unknown][]]).filter(([,fields])=>fields.length);
+ const missing=groups.flatMap(([,fields])=>fields).filter(([,v])=>!hasEvidence(v)).length;
  return <section className="wa-panel hx-control-definition">
-  <header><h2>Control definition & ownership</h2><span>{missing} fields not recorded</span></header>
+  <header><h2>Control definition & ownership</h2><span>{populated.flatMap(([,fields])=>fields).length} recorded fields</span></header>
   <div className="control-intro"><span className="control-number">Control {control}</span><div><h3>{objective}</h3><p>{statement}</p></div></div>
-  {missing>0&&<p className="control-field-note" style={{padding:"0 20px"}}>These fields come from the versioned control definition attached to this run. Runtime spans do not supply policy ownership, thresholds or assessment results.</p>}
-  <div className="control-field-groups">{groups.map(([title,fields])=><section key={title}><h3>{title}</h3><dl>{fields.map(([label,v])=><div key={label}><dt>{label}</dt><dd className={v==null?'is-missing':undefined}>{fmt(v)}</dd></div>)}</dl>{title==='Version & timing'&&<p className="control-field-note">Version date is not an exact effective time.</p>}{title==='Enforcement & tolerance'&&<p className="control-field-note">Declared mode does not prove enforcement.</p>}</section>)}</div>
+  {missing>0&&<p className="control-field-note" style={{padding:"0 20px"}}>{populated.length?'Only recorded metadata is shown.':'No versioned control definition is attached to this run.'} Assessment requirements are listed under Evidence gaps.</p>}
+  <div className="control-field-groups">{populated.map(([title,fields])=><section key={title}><h3>{title}</h3><dl>{fields.map(([label,v])=><div key={label}><dt>{label}</dt><dd className={v==null?'is-missing':undefined}>{fmt(v)}</dd></div>)}</dl>{title==='Version & timing'&&<p className="control-field-note">Version date is not an exact effective time.</p>}{title==='Enforcement & tolerance'&&<p className="control-field-note">Declared mode does not prove enforcement.</p>}</section>)}</div>
   <div className="control-procedure"><span>Procedure</span><p>{procedure}</p></div>
  {control==='7'&&<div className="hx-result"><span>Eligible gaps <b>{fmt(run.c7.gap_count)}</b></span><span>Max gap <b>{fmt(run.c7.max_gap_ms)} ms</b></span><span>Gap limit <b>{fmt(run.c7.gap_limit_ms)} ms</b></span><span>Violations <b>{fmt(run.c7.gap_violations?.length)}</b></span><span>Timing result <b>{fmt(run.c7.timing_verdict)}</b></span></div>}</section>
 }

@@ -518,3 +518,9 @@ html[data-theme="dark"] .wa-app .viz-failures i {background:var(--status-breach)
 }
 
 .wa-app .journey-chat>header h2{flex:0 1 auto}
+
+/* Optional evidence should not reserve space when no value was collected. */
+.wa-app .query-metrics:empty,.wa-app .supporting-metrics:empty,.control-field-groups:empty{display:none}
+.wa-app .query-metrics,.wa-app .supporting-metrics{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.query-recorded-usage{padding:16px 18px;margin:0 0 16px;border:1px solid var(--border);border-radius:10px;background:var(--selected);line-height:1.6}
+.query-recorded-usage p{margin:6px 0 0;color:var(--muted);font-size:13px}
