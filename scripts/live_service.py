@@ -1,10 +1,11 @@
-"""Authenticated adapter for the existing Alpha runner and CloudWatch collector."""
+"""Authenticated scenario execution through the conditional agent coordinator."""
 import argparse, datetime as dt, hashlib, hmac, json, os, re, subprocess, threading, uuid
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 import assurance_api as evidence
 from telemetry_service import query, millis
+from workflow_evidence import load_workflow
 
 def now():return dt.datetime.now(dt.timezone.utc).isoformat()
 def read(path):return json.loads(Path(path).read_text())
@@ -17,17 +18,47 @@ class Runtime:
   for path in self.root.glob('*/job.json'):
    job=read(path)
    if job['state'] in ('queued','running','collecting'):
+    self.interrupted(path.parent,job)
     job.update(state='interrupted',message='Service restarted. Runtime sessions may still be active; inspect before launching again.',finishedAt=now());save(path,job)
+ def interrupted(self,directory,job):
+  if job.get('mode')=='workflow':
+   pinned=read(directory/'execution.json');root=Path(pinned['evidence'])/'runs'/job['runId']
+   if root.is_dir():save(root/'workflow-interrupted.json',{'run_id':job['runId'],'at':now()})
  def catalog(self):
   config=self.config;data=read(config['data']);threshold=read(config['threshold'])
-  return {'scenarios':[{'id':s['id'],'title':s.get('title',s['id'])} for s in data['fault_scenarios']], 'threshold':{'version':threshold.get('version'),'declaredAt':threshold.get('declared_at')},'actors':config['actors'],'enabled':bool(config.get('executionEnabled')),'chatEnabled':bool(config.get('executionEnabled'))}
+  return {'scenarios':[{'id':s['id'],'title':s.get('title',s['id'])} for s in data['fault_scenarios']], 'threshold':{'version':threshold.get('version'),'declaredAt':threshold.get('declared_at')},'actors':config['actors'],'mode':config.get('executionMode','workflow'),'enabled':bool(config.get('executionEnabled')),'chatEnabled':bool(config.get('executionEnabled') and config.get('chatEnabled',True))}
  def jobs(self):
   result=[]
   for path in self.root.glob('*/job.json'):
-   job=read(path);start=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner-start.json');finish=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner.json')
-   sessions=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'sessions.json') or [];job['invokedAgents']=[s.get('actor') for s in sessions if s.get('actor')];job['traceId']=start.get('trace_id');job['completedAgents']=len(finish.get('results',[]));job['workflowCompletedAt']=finish.get('completed_at');journey=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'journey.json');job['journey']=journey.get('stages',[]);job['journeyError']=journey.get('error');result.append(job)
+   job=read(path)
+   if job.get('mode')=='workflow':
+    pinned=read(path.parent/'execution.json');root=Path(pinned['evidence'])/'runs'/job['runId']
+    try:
+     if (root/'workflow-start.json').exists():
+      view=load_workflow(root)
+      events=view.pop('events',[]);job['workflow']=view
+      job.update(workflowStatus=view['status'],outcome=view['outcome'],finalAnswer=view['finalAnswer'],
+                 stages=view['stages'],traceId=view['traceId'],workflowCompletedAt=view['completedAt'],
+                 invokedAgents=[s['actor'] for s in view['stages'] if s.get('invoked')],
+                 completedAgents=sum(s['status']=='completed' for s in view['stages']))
+      # Preserve the deployed chat client's fields without inventing extra stages.
+      titles={'customer:triage':'Customer context','it:analysis':'IT investigation','network:analysis':'Network analysis','customer:response':'Customer response'}
+      answers={f['stage']:f['answer'] for f in view['findings']};answers['customer:response']=view['finalAnswer']
+      job['journey']=[dict(id=s['stage'],role=s['role'],title=titles[s['stage']],answer=answers.get(s['stage'],''),
+                          error=s.get('reason') if s['status']=='failed' else None,
+                          toolCalls=[{k:e[k] for k in ('request_tool_name','outcome','attempt_id','http_status') if k in e} for e in events if e.get('stage')==s['stage'] and e.get('kind')=='tool'],
+                          state='not-required' if s['status']=='unnecessary' else s['status'],
+                          invocationId=s.get('invocation_id'),startedAt=s.get('started_at'),finishedAt=s.get('completed_at')) for s in view['stages']]
+      if job.get('kind')=='chat':job['answer']=view['finalAnswer']
+    except (OSError,ValueError,TypeError,KeyError):
+     job.update(workflowReadError=True,message='Workflow evidence is unavailable or malformed.')
+    result.append(job);continue
+   start=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner-start.json');finish=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'runner.json')
+   sessions=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'sessions.json') or [];job['invokedAgents']=[s.get('actor') for s in sessions if s.get('actor')];job['traceId']=start.get('trace_id');job['completedAgents']=len(finish.get('results',[]));job['workflowCompletedAt']=finish.get('completed_at')
+   journey=evidence.read(Path(self.config['evidence'])/'runs'/job['runId']/'journey.json');job['journey']=journey.get('stages',[]);job['journeyError']=journey.get('error');result.append(job)
   return sorted(result,key=lambda j:j['createdAt'],reverse=True)[:100]
  def chat(self,message,key,parent=None):
+  if not self.config.get('chatEnabled',True):raise RuntimeError('Chat execution is disabled')
   if not isinstance(message,str) or not message.strip() or len(message)>3000:raise ValueError('Message must contain 1–3000 characters')
   if parent is not None and (not isinstance(parent,str) or not re.fullmatch('[a-f0-9]{24}',parent)):raise ValueError('Invalid parent message')
   history=[]
@@ -39,57 +70,96 @@ class Runtime:
   return self.launch('chat-message',key,{'kind':'chat','userMessage':message,'parentId':parent,'history':history})
  def launch(self,scenario,key,chat=None):
   if not isinstance(key,str) or not re.fullmatch('[a-zA-Z0-9_-]{16,80}',key):raise ValueError('A valid idempotency key is required')
+  if not isinstance(scenario,str):raise ValueError('A scenario is required')
   with self.lock:
    jobid=hashlib.sha256(key.encode()).hexdigest()[:24];directory=self.root/jobid;path=directory/'job.json'
    if path.exists():
     job=read(path)
-    if job['scenario']!=scenario or job.get('userMessage')!=(chat or {}).get('userMessage') or job.get('parentId')!=(chat or {}).get('parentId'):raise ValueError('Launch key already belongs to another scenario')
+    if job['scenario']!=scenario or job.get('userMessage')!=(chat or {}).get('userMessage') or job.get('parentId')!=(chat or {}).get('parentId'):raise ValueError('Launch key already belongs to another request')
     return job
    if not self.config.get('executionEnabled'):raise RuntimeError('Run execution is disabled')
    if any(j['state'] in ('queued','running','collecting','interrupted') for j in self.jobs()):raise RuntimeError('Another execution is active or requires review')
    if not chat and scenario not in [s['id'] for s in self.catalog()['scenarios']]:raise ValueError('Unknown scenario')
+   mode=self.config.get('executionMode','workflow')
+   if mode not in ('workflow','legacy'):raise ValueError('Unknown execution mode')
+   actors=self.config.get('actors',{})
+   if (set(actors)!= {'customer','it','network'} or any(not isinstance(v,str) or not re.fullmatch(r'[A-Za-z0-9._-]{1,128}',v) for v in actors.values())
+       or len(set(actors.values()))!=3):raise ValueError('Configure three distinct role-to-runtime names')
+   timeout=self.config.get('invocationTimeout',180)
+   if type(timeout) is not int or not 1<=timeout<=420:raise ValueError('Invocation timeout must be 1..420 seconds')
+   threshold=read(self.config['threshold'])
+   if millis(threshold['declared_at'])>millis(now()):raise ValueError('Threshold declaration is in the future')
    directory.mkdir(mode=0o700);runid='ui-'+uuid.uuid4().hex
    # Copy the actual declared configuration before dispatch. Never synthesize thresholds.
    for keyname in ('data','threshold','register'):
-    data=Path(self.config[keyname]).read_bytes();(directory/keyname).write_bytes(data)
+    data=Path(self.config[keyname]).read_bytes();(directory/keyname).write_bytes(data);os.chmod(directory/keyname,0o600)
    threshold=read(directory/'threshold')
    if millis(threshold['declared_at'])>millis(now()):raise ValueError('Threshold declaration is in the future')
-   job={'id':jobid,'runId':runid,'scenario':scenario,'state':'queued','createdAt':now(),'thresholdVersion':threshold['version'],'thresholdDigest':hashlib.sha256((directory/'threshold').read_bytes()).hexdigest()}
+   save(directory/'actors.json',actors)
+   save(directory/'execution.json',dict(self.config,executionMode=mode,invocationTimeout=timeout))
+   job={'id':jobid,'runId':runid,'scenario':scenario,'mode':mode,'state':'queued','createdAt':now(),'thresholdVersion':threshold['version'],'thresholdDigest':hashlib.sha256((directory/'threshold').read_bytes()).hexdigest()}
    if chat:
-    job.update(chat);save(directory/'chat-request.json',{'message':chat['userMessage'],'history':chat['history']});save(directory/'data',{'fault_scenarios':[{'id':'chat-message','title':'Customer message','symptoms':{}}]})
+    job.update(chat);save(directory/'chat-request.json',{'message':chat['userMessage'],'history':chat['history']})
+    save(directory/'chat-context.json',{'conversation_history':chat['history']})
+    if mode=='legacy':save(directory/'data',{'fault_scenarios':[{'id':'chat-message','title':'Customer message','symptoms':{}}]})
    save(path,job);threading.Thread(target=self.execute,args=(directory,job),daemon=True).start();return job
  def execute(self,directory,job):
-  config=self.config;path=directory/'job.json'
-  command=['python3','-m','tools.control7.runner',job['scenario'],'--data',str(directory/'data'),'--threshold',str(directory/'threshold'),'--register',str(directory/'register'),'--evidence',config['evidence'],'--run-id',job['runId'],'--actors',','.join(k+'='+v for k,v in config['actors'].items()),'--budget-export']
-  if job.get('kind')=='chat':
-   command=['python3',str(Path(__file__).with_name('chat_runner.py')),str(directory/'chat-request.json')]+command[3:]
+  config=read(directory/'execution.json');path=directory/'job.json';workflow=job.get('mode')=='workflow'
+  output=Path(config['evidence'])/'runs'/job['runId']
+  if workflow:
+   inputs=['--question',job['userMessage'],'--context',str(directory/'chat-context.json')] if job.get('kind')=='chat' else ['--scenario',job['scenario'],'--data',str(directory/'data')]
+   command=['python3','-m','tools.workflow']+inputs+[
+            '--threshold',str(directory/'threshold'),'--runtimes',str(directory/'actors.json'),
+            '--run-id',job['runId'],'--output',str(output),'--timeout',str(config['invocationTimeout']),
+            '--namespace',config.get('namespace','components')]
+  else:
+   command=['python3','-m','tools.control7.runner',job['scenario'],'--data',str(directory/'data'),'--threshold',str(directory/'threshold'),'--register',str(directory/'register'),'--evidence',config['evidence'],'--run-id',job['runId'],'--actors',','.join(k+'='+v for k,v in config['actors'].items()),'--budget-export']
+   if job.get('kind')=='chat':command=['python3',str(Path(__file__).with_name('chat_runner.py')),str(directory/'chat-request.json')]+command[3:]
   job.update(state='running',startedAt=now());save(path,job)
   try:
    with (directory/'runner.log').open('w') as log:
-    result=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=1800,env=dict(os.environ,PYTHONPATH=config['repository']))
+    result=subprocess.run(command,cwd=config['repository'],stdout=subprocess.DEVNULL if workflow else log,stderr=log,
+                          timeout=4*(config['invocationTimeout']+90)+120 if workflow else 1800,umask=0o077,
+                          env=dict(os.environ,PYTHONPATH=config['repository']))
+   job['exitCode']=result.returncode;job.update(state='collecting');save(path,job)
+   if workflow:
+    # Read only coordinator artifacts. The legacy collector/evaluators require a
+    # different manifest and must not manufacture verdicts for this workload.
+    summary=load_workflow(output)
+    for source,target in (('threshold','c7-threshold.json'),('register','workflow-register.yaml')):
+     with (output/target).open('xb') as stream:stream.write((directory/source).read_bytes())
+     os.chmod(output/target,0o600)
+    save(output/'workflow-summary.json',summary)
+    save(output/'workflow-ui.json',{'scenario':job['scenario'],'jobId':job['id']})
+    job.update(collectionExitCode=0,assessmentState='not_assessed',
+               state='completed' if result.returncode==0 and summary['status']=='completed' else 'failed',
+               message='Workflow results recorded. Control assessments are separate.',finishedAt=now())
+    if job.get('kind')=='chat':
+     job.update(answer=summary['finalAnswer'],outcome=summary['outcome'],agentHttpStatus=500 if summary['status']=='failed' else 200,
+                evidenceState='completed')
+    save(path,job);return
    if job.get('kind')=='chat':
-    response_path=Path(config['evidence'])/'runs'/job['runId']/'chat-answer.json'
-    try:
-     response=json.loads(response_path.read_text());job['answer']=response.get('answer','');job['disposition']=response.get('disposition');job['agentHttpStatus']=response.get('http_status')
-    except (OSError,ValueError):job['answer']=''
-   job['exitCode']=result.returncode;job.update(state='collecting')
-   if job.get('kind')=='chat':
-    answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
-    job.update(state='completed' if answered else 'failed',finishedAt=now(),message='Customer service combined the investigation results.' if answered else 'Investigation stopped before a final customer response. See the recorded stages.',evidenceState='collecting')
-   save(path,job)
+    response=evidence.read(output/'chat-answer.json');job.update(answer=response.get('answer',''),disposition=response.get('disposition'),agentHttpStatus=response.get('http_status'))
+    answered=bool(job.get('answer')) and type(job.get('agentHttpStatus')) is int and 200<=job['agentHttpStatus']<400 and result.returncode==0
+    job.update(state='completed' if answered else 'failed',finishedAt=now(),
+               message='Customer service combined the investigation results.' if answered else 'Investigation stopped before a final customer response. See the recorded stages.',evidenceState='collecting')
+    save(path,job)
    # The configured collector is a fixed administrator-owned argv, never browser input.
    if config.get('collector'):
     command=[arg.replace('{runId}',job['runId']) for arg in config['collector']]
     with (directory/'collector.log').open('w') as log:
      collected=subprocess.run(command,cwd=config['repository'],stdout=log,stderr=log,timeout=600,env=dict(os.environ,ALPHA_EVIDENCE=config['evidence'],ALPHA_REGISTER=str(directory/'register')))
-    job['collectionExitCode']=collected.returncode;job['evidenceState']='completed' if collected.returncode==0 else 'failed'
+    job['collectionExitCode']=collected.returncode
    job.update(state='completed' if result.returncode==0 and job.get('collectionExitCode',1)==0 else 'failed',message='Process outcomes recorded. Control results and business completion require evidence.',finishedAt=now())
    if job.get('kind')=='chat':
-    answered=bool(job.get('answer')) and isinstance(job.get('agentHttpStatus'),int) and job['agentHttpStatus']<400 and result.returncode==0
-    job.update(state='completed' if answered else 'failed',message=('Customer service combined the investigation results.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Investigation stopped before a final customer response. See the recorded stages.')
+    job.update(state='completed' if answered else 'failed',evidenceState='completed' if job.get('collectionExitCode')==0 else 'failed',
+               message=('Customer service combined the investigation results.'+(' Trace evidence collection failed.' if job.get('collectionExitCode',0)!=0 else '')) if answered else 'Investigation stopped before a final customer response. See the recorded stages.')
   except subprocess.TimeoutExpired:
-   if job.get('kind')=='chat' and job.get('finishedAt'):job.update(evidenceState='failed',message='Agent response retained. Evidence collection timed out.')
-   else:job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
+   if not workflow and job.get('kind')=='chat' and job.get('finishedAt'):
+    job.update(evidenceState='failed',message='Agent response retained. Evidence collection timed out.')
+   else:
+    self.interrupted(directory,job)
+    job.update(state='interrupted',message='Execution timed out. Remote session state needs review; it has not been declared stopped.',finishedAt=now())
   except Exception:job.update(state='failed',message='Runner or collector failed. Inspect server-side execution logs.',finishedAt=now())
   save(path,job)
 
@@ -118,19 +188,23 @@ class Handler(BaseHTTPRequestHandler):
   origin=self.headers.get('Origin')
   if origin and origin not in self.server.runtime.config.get('origins',[]):self.respond(403,{'error':'Origin not allowed'});return
   if self.headers.get('Content-Type','').split(';')[0]!='application/json':self.respond(415,{'error':'JSON required'});return
-  if not urlparse(self.path).path.endswith(('/api/executions','/api/messages')):self.respond(404,{'error':'Endpoint unavailable'});return
+  endpoint=urlparse(self.path).path
+  if not endpoint.endswith(('/api/executions','/api/messages')):self.respond(404,{'error':'Endpoint unavailable'});return
   try:
    size=int(self.headers.get('Content-Length','0'))
-   if size<1 or size>16384:raise ValueError('Invalid request size')
+   chat=endpoint.endswith('/api/messages')
+   if size<1 or size>(16384 if chat else 4096):raise ValueError('Invalid request size')
    data=json.loads(self.rfile.read(size))
-   if not isinstance(data,dict):raise ValueError('JSON object required')
-   job=self.server.runtime.chat(data.get('message'),data.get('idempotencyKey'),data.get('parentId')) if urlparse(self.path).path.endswith('/api/messages') else self.server.runtime.launch(data.get('scenario'),data.get('idempotencyKey'))
+   allowed={'message','idempotencyKey','parentId'} if chat else {'scenario','idempotencyKey'}
+   if not isinstance(data,dict) or set(data)-allowed:raise ValueError('Invalid launch fields')
+   job=self.server.runtime.chat(data.get('message'),data.get('idempotencyKey'),data.get('parentId')) if chat else self.server.runtime.launch(data.get('scenario'),data.get('idempotencyKey'))
    self.respond(202,job)
-  except (ValueError,TypeError) as e:self.respond(400,{'error':str(e) or 'Invalid request'})
+  except (ValueError,TypeError):self.respond(400,{'error':'Invalid scenario or launch key'})
   except RuntimeError as e:self.respond(409,{'error':str(e)})
   except OSError:self.respond(503,{'error':'Execution configuration unavailable'})
  def log_message(self,*args):pass
 if __name__=='__main__':
+ os.umask(0o077)
  parser=argparse.ArgumentParser();parser.add_argument('--config',required=True);parser.add_argument('--token-file',required=True);parser.add_argument('--port',type=int,default=8767);args=parser.parse_args()
  token=Path(args.token_file).read_text().strip()
  if len(token)<32:raise SystemExit('A strong service token is required')

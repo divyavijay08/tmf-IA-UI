@@ -50,6 +50,14 @@ The frontend and API appear under one browser origin. This avoids browser CORS p
 
 ## Requirements
 
+Frontend deployment and adapter deployment are separate. The standalone adapter
+now includes the conditional workflow changes ported from Hackathon `f446cf8` and
+`fd81a40`, while its `repository` configuration still points to the separately
+managed Hackathon checkout. Do not replace the running adapter/configuration or
+agent images as a side effect of publishing frontend assets. Compare current live
+files and teammate changes, run the workflow contract suite described in
+`INTEGRATION.md`, and preserve the existing runtime map before an adapter rollout.
+
 Before deploying, confirm:
 
 1. The changes are committed and pushed to `main` in `divyavijay08/tmf-IA-UI`.

@@ -54,9 +54,11 @@ Verified the remote Hackathon repository at `46475eb` and the running adapter's
 configuration before editing. The live adapter uses `/home/ec2-user/workflow-routing-007fe470/repo`
 and `alpha-wf4-customer`, `alpha-wf4-it`, `alpha-wf4-network`. That checkout also
 has teammate routing changes beyond the committed repository; preserve them.
-Do not replace its adapter or coordinator with this repository's older
-`chat_runner.py` / `agent_journey.py`. Those are the previous orchestration path;
-the deployed backend's `tools.workflow` is authoritative.
+The adapter in this repository now supports that conditional workflow (see the
+source synchronization below). `chat_runner.py` / `agent_journey.py` remain the
+explicit legacy fallback; the Hackathon backend's `tools.workflow` is authoritative.
+Do not overwrite the live adapter or coordinator without comparing its current
+configuration and teammate working-tree changes first.
 
 Chat submits the user's exact message through `POST /api/messages`. The UI reads
 `agent-workflow/v1` from `GET /api/executions`, validates trace/stage/invocation
@@ -81,3 +83,49 @@ shape. Raw prompts/tool bodies/events are omitted. Source coverage and incomplet
 scans remain visible. The current source is `aws/spans` (gateway); this is not a
 claim of complete agent-runtime span coverage. Existing general telemetry remains
 available independently through `/api/telemetry`.
+
+## Source synchronization from Hackathon
+
+Integrated the UI-side adapter/evidence changes from
+[`f446cf8`](https://github.com/NetoAI/Hackathon/commit/f446cf89a7d865ee6143111a82ae4bb8696ebb91)
+and [`fd81a40`](https://github.com/NetoAI/Hackathon/commit/fd81a405169f85a8bde7e2bd1c7dee2797e31054).
+These are selective ports into the standalone repository, not whole-monorepo
+cherry-picks. Agent runtime files and `tools.workflow` remain owned by Hackathon.
+
+- `live_service.py` defaults to `executionMode: workflow`, pins paths/runtime
+  mappings/timeouts per job, and sends exact chat messages and server-owned
+  history to `python3 -m tools.workflow`. A compatible Hackathon checkout must
+  be configured as `repository`; no silent legacy fallback is performed.
+- `workflow_evidence.py` projects coordinator artifacts for jobs and assurance
+  exports. Workflow assessments remain `not_assessed`; the legacy collector is
+  not applied to the different workflow artifact contract.
+- Current chat, trace proxy, voice/model controls and stage rendering are retained.
+  Existing frontend validation/refresh logic covers the teammate changes; terminal
+  results now also require an explicit business outcome.
+- Explicit `executionMode: legacy` retains the existing runners, early chat reply,
+  and preservation of the answer when subsequent evidence collection times out.
+  Compatibility labels say Network analysis; execution of a digital-twin tool
+  still requires recorded evidence.
+
+`chatEnabled` (default true) and `executionEnabled` must both permit new messages.
+Runtime mappings require three distinct Customer/IT/Network agent names. HTTP
+payloads cannot override mappings or dispatch configuration. The authenticated
+adapter and same-origin proxy remain separate services.
+
+Verification (offline, with mocked agent invocations):
+
+```sh
+npm test
+npm run build
+HACKATHON_ROOT=/absolute/path/to/Hackathon npm run test:backend
+HACKATHON_ROOT=/absolute/path/to/Hackathon npm run test:workflow
+```
+
+The integration suite uses the real Hackathon coordinator and checks Customer-only,
+IT and Network routes, failure/approval/information outcomes, history, exact message
+dispatch, authentication, idempotency, pinned configuration and the current
+TypeScript parser. `test:backend` reports the coordinator suite as skipped if the
+checkout is absent; `test:workflow` requires it and fails without it. This port was
+tested against the exact `fd81a40` source snapshot. It does not deploy agent images
+or prove live model compliance with the tool-loop and JSON-schema safeguards.
+No running services are changed by this repository synchronization.

@@ -3,6 +3,7 @@ from pathlib import Path
 import json, datetime, argparse, os, mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+from workflow_evidence import load_workflow
 STATIC = Path(__file__).parent / 'dist'
 ROOT = Path(os.environ.get('ASSURANCE_EVIDENCE_ROOT', '/home/ec2-user/environment/evidence/runs'))
 FIELDS = ('receipt_id','notification_id','finding_id','servicenow_sys_id','servicenow_number','servicenow_url','channel','delivered_at','response_status','threshold_digest','foundation_check_id','runtime_id','runtime_version','zone','principal','authority','owner','control_id','span_id','parent_span_id','event_id','phase','actor','ts','emitted_at','started_at','call_id','logical_call_id','action_id','trace_id','attempt_id','outcome','verdict','decision','reason','error','http_status','policy_id','policy_version','threshold_version','enforcement_point','committed','reserved','estimate','projected','recipient','delivery_status','asset','request_tool_name','attested_by')
@@ -14,6 +15,11 @@ def rows(p):
  return [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
 def pick(d, keys): return {k:d[k] for k in keys if k in d}
 def load_run(p):
+ if (p/'workflow-start.json').exists() or (p/'workflow.json').exists():
+  workflow=load_workflow(p);events=workflow.pop('events');metadata=read(p/'workflow-ui.json')
+  return {'id':p.name,'scenario':metadata.get('scenario',p.name),'sources':{'workflow':{'source':'coordinator artifacts','independentControlAssessment':False}},
+          'collectedAt':None,'window':[],'c7':{},'c16':{},'c9':{},'budget':{},
+          'c7Threshold':read(p/'c7-threshold.json'),'workflow':workflow,'events':events}
  manifest=read(p/'manifest.json'); runner=read(p/'runner.json') or read(p/'runner-start.json'); budget=read(p/'budget.json'); c7=read(p/'reports/control-7.json'); c16=read(p/'control-16.json') or read(p/'control-16-inline.json')
  events=[]
  for source, records in [('ledger.jsonl',rows(p/'ledger.jsonl')),('decisions.jsonl',rows(p/'decisions.jsonl')),('budget.json',budget.get('events',[])),('runner.json',runner.get('attempts',[])),('notifications.jsonl',rows(p/'notifications.jsonl'))]:
@@ -25,7 +31,7 @@ def load_run(p):
 def snapshot():
  runs=[]; errors=[]
  for p in sorted(ROOT.iterdir()):
-  if not p.is_dir() or not ((p/'reports/control-7.json').exists() or (p/'control-16.json').exists() or (p/'budget.json').exists() or (p/'runner-start.json').exists()): continue
+  if not p.is_dir() or not any((p/name).exists() for name in ('reports/control-7.json','control-16.json','budget.json','runner-start.json','workflow-start.json','workflow.json')): continue
   try: runs.append(load_run(p))
   except (ValueError,OSError,TypeError,KeyError) as e: errors.append({'run':p.name,'error':'Evidence unavailable or malformed: '+type(e).__name__})
  return {'schema':2,'source':'AWS collected evidence','readAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'runs':runs,'errors':errors,'freshness':'Reads existing collector outputs; does not trigger CloudWatch collection','governance':{'mode':'browser','runCorrelation':'unverified'}}

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -14,7 +15,7 @@ class MessageIntegrationTests(unittest.TestCase):
   self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
   for name,data in [('data',{'fault_scenarios':[{'id':'S1','symptoms':{'element':'SHOULD-NOT-BE-SENT'}}]}),('threshold',{'version':'v1','declared_at':'2026-01-01T00:00:00Z'}),('register',{})]:
    (self.root/name).write_text(json.dumps(data))
-  self.runtime=Runtime(dict(jobs=str(self.root/'jobs'),data=str(self.root/'data'),threshold=str(self.root/'threshold'),register=str(self.root/'register'),evidence=str(self.root/'evidence'),actors={'customer':'alpha-c716-customer'},executionEnabled=True,repository=str(self.root)))
+  self.runtime=Runtime(dict(jobs=str(self.root/'jobs'),data=str(self.root/'data'),threshold=str(self.root/'threshold'),register=str(self.root/'register'),evidence=str(self.root/'evidence'),actors={'customer':'alpha-c716-customer','it':'alpha-c716-it','network':'alpha-c716-network'},executionMode='legacy',executionEnabled=True,repository=str(self.root)))
  def tearDown(self):self.temp.cleanup()
  def create(self,message='My service ABC-987 is down',key='a'*16,parent=None):
   with patch.object(threading.Thread,'start'):return self.runtime.chat(message,key,parent)
@@ -48,5 +49,23 @@ class MessageIntegrationTests(unittest.TestCase):
   job=self.create();directory=self.root/'jobs'/job['id']
   with patch('live_service.subprocess.run',return_value=SimpleNamespace(returncode=0)):self.runtime.execute(directory,job)
   self.assertEqual(read(directory/'job.json')['state'],'failed')
+ def test_legacy_answer_is_available_before_collection_and_survives_timeout(self):
+  self.runtime.config['collector']=['fixture-collector','{runId}']
+  job=self.create();directory=self.root/'jobs'/job['id']
+  def run(command,**kwargs):
+   if command[0]=='fixture-collector':
+    stored=read(directory/'job.json')
+    self.assertEqual(stored['state'],'completed')
+    self.assertEqual(stored['answer'],'Recorded customer response')
+    self.assertEqual(stored['evidenceState'],'collecting')
+    raise subprocess.TimeoutExpired(command,600)
+   self.assertEqual(read(directory/'data')['fault_scenarios'][0]['id'],'chat-message')
+   output=self.root/'evidence'/'runs'/job['runId'];output.mkdir(parents=True)
+   save(output/'chat-answer.json',{'answer':'Recorded customer response','http_status':200})
+   return SimpleNamespace(returncode=0)
+  with patch('live_service.subprocess.run',side_effect=run):self.runtime.execute(directory,job)
+  stored=read(directory/'job.json')
+  self.assertEqual((stored['state'],stored['evidenceState']),('completed','failed'))
+  self.assertEqual(stored['answer'],'Recorded customer response')
 
 if __name__=='__main__':unittest.main()

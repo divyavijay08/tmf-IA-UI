@@ -14,6 +14,7 @@ export function parseWorkflow(value:unknown,traceId?:string):AgentWorkflow|null{
  const w=value as AgentWorkflow;
  if(w.version!=='agent-workflow/v1'||w.mode!=='workflow'||!['running','completed','failed','interrupted'].includes(w.status)||typeof w.finalAnswer!=='string'||!(/^[a-f0-9]{32}$/i.test(w.traceId))||(traceId&&traceId!==w.traceId)||!Array.isArray(w.stages)||w.stages.length!==4||!Array.isArray(w.findings))throw Error('Workflow evidence is unavailable: invalid identity or schema.');
  if(w.outcome!=null&&!outcomeNames[w.outcome])throw Error('Workflow evidence has an unknown outcome.');
+ if(['completed','failed'].includes(w.status)&&!w.outcome)throw Error('Completed workflow evidence is missing its outcome.');
  for(const [index,s] of w.stages.entries()){
   if(s.stage!==Object.keys(stageNames)[index]||s.role!==s.stage.split(':')[0]||typeof s.actor!=='string'||typeof s.invoked!=='boolean'||!['pending','running','interrupted','completed','failed','unnecessary'].includes(s.status)||!strings(s.evidence_errors)||s.invoked&&typeof s.invocation_id!=='string')throw Error('Workflow stage evidence is invalid.');
   const allowed=s.stage==='customer:triage'?['finish','request_it']:s.stage==='it:analysis'?['finish','request_network']:['finish'];

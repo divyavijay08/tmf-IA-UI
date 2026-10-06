@@ -7,6 +7,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "npm run build:checker && tsc --noEmit && vite build",
     "test": "node --experimental-strip-types --test src/*.test.ts archive/legacy-ui/*.test.ts && python3 -m unittest discover -s scripts -p test_offline_checker.py",
+    "test:backend": "python3 -m unittest discover -s scripts -p 'test_*.py'",
+    "test:workflow": "python3 scripts/test_workflow_ui.py",
     "build:checker": "python3 scripts/build_offline_checker.py"
   },
   "dependencies": {

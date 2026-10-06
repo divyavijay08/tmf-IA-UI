@@ -20,7 +20,7 @@ class LiveTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as directory:
    p=Path(directory)
    for name,data in [('data',{'fault_scenarios':[{'id':'scenario'}]}),('threshold',{'declared_at':'2026-01-01T00:00:00Z','version':'v1'}),('register',{})]:(p/name).write_text(json.dumps(data))
-   r=Runtime({'jobs':str(p/'jobs'),'data':str(p/'data'),'threshold':str(p/'threshold'),'register':str(p/'register'),'evidence':str(p/'evidence'),'actors':{},'executionEnabled':True})
+   r=Runtime({'jobs':str(p/'jobs'),'data':str(p/'data'),'threshold':str(p/'threshold'),'register':str(p/'register'),'evidence':str(p/'evidence'),'actors':{'customer':'wf-customer','it':'wf-it','network':'wf-network'},'executionEnabled':True})
    with patch.object(threading.Thread,'start'):
     first=r.launch('scenario','a'*16);self.assertEqual(r.launch('scenario','a'*16)['runId'],first['runId'])
     with self.assertRaises(RuntimeError):r.launch('scenario','b'*16)
