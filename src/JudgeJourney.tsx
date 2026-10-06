@@ -14,6 +14,7 @@ import {workflowStatus} from './assuranceData';
 import {parseWorkflow,workflowAnswer,stageNames,outcomeNames,stageState,workflowTools,type AgentWorkflow} from './workflowJourney';
 import {parseCloudCapture,type CloudSpan} from './cloudwatchData';
 import {ConversationTrace} from './ConversationTrace';
+import {TraceLoadingSkeleton} from './TraceLoadingSkeleton';
 import {workshopLinks} from './workshopLinks';
 
 const REFERENCE_TRACE='c0b7e0a31db241a3adf9218c40c6cf8f';
@@ -125,7 +126,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
     <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Ask Alpha about a service issue…" rows={2} maxLength={3000} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.chatEnabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span className="chat-model" aria-label="Model: NVIDIA Nemotron Super 120B"><span className="chat-model-brand">NVIDIA</span><strong>Nemotron Super 120B</strong><span className="chat-model-label">Customer service</span></span><div className="chat-compose-actions"><VoiceInput value={prompt} onChange={setPrompt} disabled={launching||isActive(job?.state)}/><button type="submit" aria-label="Send message" disabled={launching||!config?.chatEnabled||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></div></form>
     {!job&&<div className="chat-suggestions">{['Investigate SITE-DEN-12','Check customer impact','Review network and digital twin'].map(label=><button key={label} onClick={()=>setPrompt(label==='Investigate SITE-DEN-12'?'Investigate fronthaul degradation at SITE-DEN-12. Check impacted customers, consult IT incident records, ask Network for digital-twin analysis, then summarize the evidence and next steps.':`${label}. Ask me for any missing service or customer details.`)}>{label}</button>)}</div>}
     <p className="chat-compose-note">{config?.chatEnabled?'Customer service brings in IT and Network when needed. Recorded activity appears as each stage reports back.':(error?'Customer service unavailable.':'Connecting to customer service…')}</p></div>
-   </div>:<div className="chat-inspector"><TraceControls spans={visible} selected={selectedSpan} onSelected={setSelectedSpan} run={matchedRun} job={job} workflow={workflow} traceNotice={traceNotice} onOpenRun={onOpenRun} onOpenControls={onOpenControls} onOpenTelemetry={onOpenTelemetry}/></div>}
+   </div>:<div className="chat-inspector">{traceLoading&&!visible.length?<TraceLoadingSkeleton/>:<TraceControls spans={visible} selected={selectedSpan} onSelected={setSelectedSpan} run={matchedRun} job={job} workflow={workflow} traceNotice={traceNotice} onOpenRun={onOpenRun} onOpenControls={onOpenControls} onOpenTelemetry={onOpenTelemetry}/>}</div>}
   </div>
  </section>;
 }
