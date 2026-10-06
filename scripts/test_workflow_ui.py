@@ -77,9 +77,9 @@ class WorkflowIntegration(unittest.TestCase):
             root = Path(self.config['evidence']) / 'runs' / job['runId']
             exported = api.load_run(root)
             self.assertTrue(exported['workflow']['finalAnswer'])
-            self.assertEqual(exported['c7'], {})
-            self.assertEqual(exported['c16'], {})
-            self.assertEqual(exported['c9'], {})
+            self.assertIn(exported['c7']['verdict'], ('NO EVIDENCE', 'INCONCLUSIVE'))
+            self.assertEqual(exported['c16']['verdict'], 'NO EVIDENCE')
+            self.assertEqual(exported['c9']['verdict'], 'NO EVIDENCE')
             self.assertEqual(len(exported['workflow']['stages']), 4)
             stages = exported['workflow']['stages']
             invoked = [s for s in stages if s['invoked']]
