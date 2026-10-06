@@ -135,25 +135,68 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
 .trace-selected dd {margin:0;word-break:normal;overflow-wrap:anywhere;font-weight:400}
 .trace-selected dd.trace-mono {font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.65}
 .wa-app .chat-inspector .conversation-trace-grid .wa-panel>footer {padding:14px 20px;font-size:12px;line-height:1.65;color:var(--muted);border-top:1px solid var(--border);background:color-mix(in srgb,var(--surface),var(--text) 1%)}
-.trace-path {padding:24px;max-height:450px;overflow:auto;display:flex;flex-direction:column;align-items:center;scrollbar-width:thin}
-.trace-path button {display:flex;flex-direction:column;gap:5px;width:240px;max-width:100%;padding:15px 18px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;cursor:pointer;text-align:left;box-shadow:0 2px 4px #00000004}
-.trace-path button b {font-weight:500;overflow-wrap:anywhere}
+/* The trajectory spans the full explorer width beneath the timeline and inspector. */
+.conversation-trace-charts {display:contents}
+.trace-timeline {grid-column:1;grid-row:1}
+.trace-selected {grid-column:2;grid-row:1;position:static}
+.trace-trajectory {grid-column:1/-1;grid-row:2}
+.wa-app .chat-inspector .conversation-trace-grid .trace-trajectory>header {min-height:88px}
+.trajectory-path-count {font-size:12px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.trace-path {padding:24px;background:color-mix(in srgb,var(--surface),var(--text) 1%)}
+.trajectory-chain {list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:24px}
+.trajectory-chain>li {position:relative;min-width:0}
+.trajectory-chain>li+li:before {content:'→';position:absolute;left:-20px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:17px}
+.trace-path button {display:flex;flex-direction:column;align-items:stretch;gap:8px;width:100%;height:100%;min-width:0;padding:14px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:inherit;font-size:12px;cursor:pointer;text-align:left;box-shadow:0 2px 4px #00000003}
 .trace-path button[aria-pressed=true] {border-color:var(--primary);background:var(--selected);box-shadow:0 0 0 1px var(--primary)}
 .trace-path button:hover {border-color:var(--primary)}
-.trace-path button small {font-size:11px;color:var(--muted);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.trace-path-step {max-width:100%;display:flex;flex-direction:column;align-items:center}
-.trace-path-step+.trace-path-step:before,.trace-path-children:before {content:'↓';color:var(--muted);font-size:20px;line-height:32px;text-align:center}
-.trace-path-children {display:flex;justify-content:center;flex-wrap:wrap;gap:12px;position:relative;padding-top:32px;max-width:100%}
-.trace-path-children:before {position:absolute;top:0}
+.trajectory-node-heading {display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:10px;color:var(--muted);font-weight:500}
+.trajectory-node-index {display:grid;place-items:center;min-width:23px;height:23px;border-radius:5px;border:1px solid var(--border);font-size:11px;background:var(--surface);color:var(--primary);font-variant-numeric:tabular-nums}
+.trajectory-node-heading em {font-size:9px;font-style:normal;color:var(--primary);margin-left:auto}
+.trace-path button b {font-size:12px;font-weight:600;line-height:1.5;overflow-wrap:anywhere}
+.trace-path button>small {font-size:11px;line-height:1.5;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trajectory-node-duration {font-size:12px;font-variant-numeric:tabular-nums;margin-top:auto;color:var(--muted);padding-top:4px}
+.trajectory-branches {margin-top:22px;padding-top:18px;border-top:1px dashed var(--border)}
+.trajectory-branches h3 {font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 12px}
+.trajectory-branches h3 span {margin-left:5px}
+.trajectory-branches>div {display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+/* Full-width assessment cards avoid an orphan column beside the controls. */
+.wa-app .chat-inspector .journey-trace-layout>aside {display:flex;flex-direction:column;gap:20px;min-width:0;width:100%}
+.wa-app .chat-inspector .journey-trace-layout>aside>.wa-panel {width:100%;min-width:0;margin:0}
+.wa-app .chat-inspector .journey-controls>header {display:flex;justify-content:space-between;align-items:center;gap:16px}
+.wa-app .chat-inspector .journey-controls>header h2 {margin:0 0 4px}
+.control-run-id {font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.control-assessment-count {font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.wa-app .chat-inspector .journey-controls>.control-explanation {display:block;padding:18px 20px;background:color-mix(in srgb,var(--surface),var(--primary) 4%);border-bottom:1px solid var(--border)}
+.control-explanation strong {font-size:13px;font-weight:600}
+.control-explanation p {font-size:12px;line-height:1.7;color:var(--muted);margin:5px 0 0;max-width:1000px}
+.wa-app .chat-inspector .journey-controls>.conversation-control-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:0;padding:0;border:0}
+.conversation-control-card {padding:20px;min-width:0;border-right:1px solid var(--border)}
+.conversation-control-card:last-child {border-right:0}
+.conversation-control-card>header {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;min-height:48px}
+.control-number {font-size:12px;font-weight:600;border-radius:6px;padding:5px 7px;background:var(--selected);color:var(--primary)}
+.conversation-control-card h3 {font-size:14px;font-weight:600;margin:0;flex:1}
+.control-verdict {font-size:11px;font-weight:500;white-space:nowrap;padding:5px 8px;border-radius:5px;background:var(--selected);color:var(--text)}
+.control-verdict.unassessed {background:color-mix(in srgb,var(--surface),var(--text) 6%);color:var(--muted)}
+.control-verdict.good {background:var(--status-pass-bg);color:var(--status-pass)}
+.control-verdict.bad {background:var(--status-breach-bg);color:var(--status-breach)}
+.conversation-control-card h4 {font-size:10px;letter-spacing:.055em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:0 0 8px}
+.conversation-control-card p {font-size:13px;line-height:1.7;margin:0;overflow-wrap:anywhere}
+.control-telemetry {min-height:132px}
+.control-requirement {margin-top:18px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted)}
+.wa-app .chat-inspector .journey-controls>footer {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--border)}
+.journey-controls>footer>.journey-control-actions {padding:0}
 .chat-inspector .journey-controls small,.chat-inspector .journey-outcome p {font-size:13px;line-height:1.7}
 .chat-inspector .chat-control-result {padding:18px 20px}
 .chat-inspector .chat-evidence-note {font-size:12px;line-height:1.7}
 @container (max-width:850px) {
   .conversation-trace-grid {grid-template-columns:minmax(0,1fr)}
-  .trace-selected {position:static}
-  .conversation-trace-charts {display:contents}
-  .trace-selected {grid-row:2}
-  .trace-trajectory {grid-row:3}
+  .trace-timeline {grid-column:1}
+  .trace-selected {position:static;grid-column:1;grid-row:2}
+  .trace-trajectory {grid-column:1;grid-row:3}
+  .wa-app .chat-inspector .journey-controls>.conversation-control-grid {grid-template-columns:minmax(0,1fr)}
+  .conversation-control-card {border-right:0;border-bottom:1px solid var(--border)}
+  .conversation-control-card:last-child {border-bottom:0}
+  .control-telemetry {min-height:0}
   .trace-detail-scroll {max-height:520px}
 }
 @container (max-width:450px) {
@@ -167,3 +210,5 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
 }
 @media(max-width:600px) {.chat-inspector{padding:12px}.chat-trace-status{padding:12px}.trace-metrics{padding:16px}.trace-metrics strong{font-size:19px}}
 @media(prefers-reduced-motion:reduce) {.trace-row{transition:none}}
+
+@container (max-width:450px) {.trajectory-chain{grid-template-columns:minmax(0,1fr);gap:22px}.trajectory-chain>li+li:before{content:'↓';left:50%;top:-20px;transform:translateX(-50%);line-height:18px}.trajectory-path-count{white-space:normal}.trace-path{padding:16px}}
