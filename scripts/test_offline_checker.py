@@ -14,7 +14,7 @@ class OfflineCheckerTest(unittest.TestCase):
             target = build(root / 'checker.zip')
             with ZipFile(target) as archive:
                 self.assertEqual(set(archive.namelist()), {
-                    'controlQuery.ts', 'assuranceData.ts', 'reproduce.mjs', 'README.txt'})
+                    'controlQuery.ts', 'assuranceData.ts', 'workflowJourney.ts', 'reproduce.mjs', 'README.txt'})
                 for name in ['controlQuery.ts', 'assuranceData.ts']:
                     self.assertEqual(archive.read(name), (ROOT / 'src' / name).read_bytes())
                 archive.extractall(root)

@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {parseWorkflow,workflowAnswer,stageState,stageNames,workflowTools} from './workflowJourney.ts';
+const trace='a'.repeat(32);
+function fixture(){return {version:'agent-workflow/v1',mode:'workflow',status:'failed',outcome:'execution_failure',finalAnswer:'The investigation stopped.',traceId:trace,assessmentStatus:'not_assessed',stages:Object.keys(stageNames).map((stage,i)=>({stage,role:stage.split(':')[0],actor:'test-'+stage.split(':')[0],status:i===0?'failed':'unnecessary',invoked:i===0,invocation_id:i===0?'run:customer:triage':null,evidence_errors:[]})),findings:[],events:[]};}
+test('backend failure text is displayed even without legacy answer',()=>{const w=parseWorkflow(fixture(),trace)!;assert.equal(workflowAnswer(w), 'The investigation stopped.');assert.equal(stageState(w.stages[1],w),'Not run · investigation stopped');});
+test('customer-only completion does not claim IT or network executed',()=>{const v=fixture();v.status='completed';v.outcome='answered';v.stages[0].status='completed';const w=parseWorkflow(v)!;assert.equal(stageState(w.stages[1],w),'Not needed');assert.equal(w.stages.filter(s=>s.invoked).length,1);});
+test('rejects mismatched trace, reordered stages, and invalid routing',()=>{assert.throws(()=>parseWorkflow(fixture(),'b'.repeat(32)));const v=fixture();v.stages.reverse();assert.throws(()=>parseWorkflow(v));const r=fixture();Object.assign(r.stages[0],{routing:'request_network'});assert.throws(()=>parseWorkflow(r));});
+test('findings must belong to the matching invocation',()=>{const v=fixture();Object.assign(v,{findings:[{stage:'it:analysis',invocation_id:'other',answer:'Wrong run'}]});assert.throws(()=>parseWorkflow(v));});
+test('only actual tool records appear as tool calls',()=>{const v=fixture();Object.assign(v,{events:['model','tool','other'].map((kind,i)=>({id:String(i),stage:'customer:triage',invocation_id:'run:customer:triage',trace_id:trace,kind}))});assert.equal(workflowTools(parseWorkflow(v)!).length,1);});
+test('old executions remain compatible; malformed new evidence cannot use a success fallback',()=>{assert.equal(workflowAnswer(parseWorkflow(undefined),'Old answer'),'Old answer');assert.throws(()=>parseWorkflow({mode:'workflow'}));});

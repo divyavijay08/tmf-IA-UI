@@ -5,7 +5,8 @@ import PlaylistPlayOutlined from '@mui/icons-material/PlaylistPlayOutlined';
 import {PaginatedTable} from './PaginatedTable';
 import {useEffect,useRef,useState} from 'react';
 import {Alert,Button,MenuItem,TextField} from '@mui/material';
-type Job={id:string;runId:string;scenario:string;state:string;createdAt:string;message?:string;traceId?:string;thresholdVersion?:string;exitCode?:number;collectionExitCode?:number;invokedAgents?:string[]};
+import {parseWorkflow,type AgentWorkflow} from './workflowJourney';
+type Job={workflow?:AgentWorkflow;id:string;runId:string;scenario:string;state:string;createdAt:string;message?:string;traceId?:string;thresholdVersion?:string;exitCode?:number;collectionExitCode?:number;invokedAgents?:string[]};
 async function response(r:Response){
  const d=await r.json().catch(()=>null);
  if(!r.ok)throw Error(d?.error||`Execution service unavailable (HTTP ${r.status}).`);
@@ -15,7 +16,7 @@ async function response(r:Response){
 export function ExecutionPanel({onInspect,onRefresh}:{onInspect:(id:string)=>void;onRefresh:()=>void}){
  const [config,setConfig]=useState<any>(null),[jobs,setJobs]=useState<Job[]>([]),[scenario,setScenario]=useState(''),[error,setError]=useState(''),[launching,setLaunching]=useState(false),[uncertain,setUncertain]=useState(false);
  const request=useRef<{scenario:string;idempotencyKey:string}|null>(null),states=useRef('');
- async function load(){try{const [c,j]=await Promise.all([fetch('api/execution-config',{cache:'no-store'}).then(response),fetch('api/executions',{cache:'no-store'}).then(response)]);setConfig(c);setJobs(j.executions);setScenario(s=>s||c.scenarios[0]?.id||'');const next=JSON.stringify(j.executions.map((x:Job)=>[x.id,x.state]));if(states.current&&next!==states.current)onRefresh();states.current=next;setError('')}catch(e){setError((e as Error).message)}}
+ async function load(){try{const [c,j]=await Promise.all([fetch('api/execution-config',{cache:'no-store'}).then(response),fetch('api/executions',{cache:'no-store'}).then(response)]);for(const job of j.executions)if(job.workflow)parseWorkflow(job.workflow,job.traceId);setConfig(c);setJobs(j.executions);setScenario(s=>s||c.scenarios[0]?.id||'');const next=JSON.stringify(j.executions.map((x:Job)=>[x.id,x.state,x.workflow?.stages,x.workflow?.outcome]));if(states.current&&next!==states.current)onRefresh();states.current=next;setError('')}catch(e){setError((e as Error).message)}}
  useEffect(()=>{void load();const t=setInterval(()=>{if(!document.hidden)void load()},5000);return()=>clearInterval(t)},[]);
  async function launch(){if(!request.current)request.current={scenario,idempotencyKey:crypto.randomUUID()};setLaunching(true);try{const r=await fetch('api/executions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.current),signal:AbortSignal.timeout(15000)});if(!r.ok){const d=await r.json();if(r.status<500){request.current=null;setUncertain(false)}throw Error(d.error||'Launch rejected')}await response(r);request.current=null;setUncertain(false);await load()}catch(e){setError((e as Error).message);setUncertain(!!request.current)}finally{setLaunching(false)}}
  const active=jobs.some(j=>['queued','running','collecting','interrupted'].includes(j.state));

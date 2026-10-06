@@ -47,3 +47,29 @@ All stages share one trace/run ID and have distinct invocation IDs. The runner r
 The final chat answer comes only from the final Customer invocation. `GET /api/executions` returns recorded journey stages, findings and tool-call metadata as each invocation returns. This is stage-level progress, not model token streaming. The UI separately loads CloudWatch spans for the exact trace; telemetry ingestion can lag behind the answer. Status polling stops after execution and evidence collection settle. Follow-up turns retain prior user and final Customer responses.
 
 Messages and evidence are retained in the restricted server job/evidence store. This remains the shared workshop workspace, not a private per-user chat service.
+
+## Chat workflow observability — 6 October update
+
+Verified the remote Hackathon repository at `46475eb` and the running adapter's
+configuration before editing. The live adapter uses `/home/ec2-user/workflow-routing-007fe470/repo`
+and `alpha-wf4-customer`, `alpha-wf4-it`, `alpha-wf4-network`. That checkout also
+has teammate routing changes beyond the committed repository; preserve them.
+Do not replace its adapter or coordinator with this repository's older
+`chat_runner.py` / `agent_journey.py`. Those are the previous orchestration path;
+the deployed backend's `tools.workflow` is authoritative.
+
+Chat submits the user's exact message through `POST /api/messages`. The UI reads
+`agent-workflow/v1` from `GET /api/executions`, validates trace/stage/invocation
+identities, and renders actual routing, findings, limitations, runtime IDs and
+finalAnswer (including failures where the legacy answer is empty). Optional
+stages are shown as not needed, or not run after failure. A network stage alone
+is not proof of a digital-twin tool call. Tool activity comes from the adapter's
+allowlisted journey toolCalls and exact-trace CloudWatch metadata.
+
+Workflow status is separate from business outcome and control assessment.
+Workflow C7/C9/C16 verdicts remain not assessed until the backend's control
+integration supplies validated combined assessments. No thresholds, security
+controls, runtime configuration or backend teammate files are changed by this
+frontend deployment. The new AWS span API was inspected; chat retains the
+existing same-origin authenticated telemetry adapter, without exposing a new
+listener or credentials.

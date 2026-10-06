@@ -10,6 +10,7 @@ def build(target=TARGET):
     files = {
         'controlQuery.ts': ROOT / 'src/controlQuery.ts',
         'assuranceData.ts': ROOT / 'src/assuranceData.ts',
+        'workflowJourney.ts': ROOT / 'src/workflowJourney.ts',
         'reproduce.mjs': ROOT / 'scripts/offline/reproduce.mjs',
         'README.txt': ROOT / 'scripts/offline/README.txt',
     }
