@@ -6,9 +6,7 @@ import HubOutlined from '@mui/icons-material/HubOutlined';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import FactCheckOutlined from '@mui/icons-material/FactCheckOutlined';
 import InsightsOutlined from '@mui/icons-material/InsightsOutlined';
-import TimelineOutlined from '@mui/icons-material/TimelineOutlined';
 import MonitorHeartOutlined from '@mui/icons-material/MonitorHeartOutlined';
-import DnsOutlined from '@mui/icons-material/DnsOutlined';
 import SmartToyOutlined from '@mui/icons-material/SmartToyOutlined';
 import PlayCircleOutlined from '@mui/icons-material/PlayCircleOutlined';
 import ManageSearchOutlined from '@mui/icons-material/ManageSearchOutlined';
@@ -17,8 +15,8 @@ import TerminalOutlined from '@mui/icons-material/TerminalOutlined';
 import ForumOutlined from '@mui/icons-material/ForumOutlined';
 export const navigationLabels:Record<string,string>={'Journey':'Judge journey','Trust chain':'Run inspector','Overview':'Workspace overview','Agent runs':'Runs & executions','Observability':'CloudWatch & traces','Control register':'Controls & thresholds','Integrations':'Sources & ServiceNow','Findings & gaps':'Findings & response','Audit workspace':'Query & reproduce','Measured impact':'Outcomes & impact'};
 const navigationGroups=[
- {label:'Workspace',items:[{name:'Journey',icon:ForumOutlined},{name:'Overview',icon:DashboardOutlined},{name:'Live monitor',icon:MonitorHeartOutlined},{name:'Foundation & runtime',icon:DnsOutlined},{name:'Agents & principals',icon:SmartToyOutlined}]},
- {label:'Investigation',items:[{name:'Agent runs',icon:PlayCircleOutlined},{name:'Evidence explorer',icon:ManageSearchOutlined},{name:'Observability',icon:TimelineOutlined},{name:'Trust chain',icon:AccountTreeOutlined}]},
+ {label:'Workspace',items:[{name:'Journey',icon:ForumOutlined},{name:'Overview',icon:DashboardOutlined},{name:'Live monitor',icon:MonitorHeartOutlined},{name:'Agents & principals',icon:SmartToyOutlined}]},
+ {label:'Investigation',items:[{name:'Agent runs',icon:PlayCircleOutlined},{name:'Evidence explorer',icon:ManageSearchOutlined},{name:'Trust chain',icon:AccountTreeOutlined}]},
  {label:'Assurance',items:[{name:'Control register',icon:VerifiedUserOutlined},{name:'Findings & gaps',icon:ReportProblemOutlined},{name:'Notifications & receipts',icon:NotificationsOutlined},{name:'Integrations',icon:HubOutlined},{name:'Evidence coverage',icon:FactCheckOutlined},{name:'Audit workspace',icon:TerminalOutlined},{name:'Measured impact',icon:InsightsOutlined}]},
 ];
 export const navigationSection=(page:string)=>navigationGroups.find(group=>group.items.some(item=>item.name===page))?.label??'Workspace';
