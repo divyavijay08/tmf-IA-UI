@@ -31,8 +31,10 @@ def stage_diagnostic(record, response):
     raw = raw if isinstance(raw, dict) else {}
     code, detail = PUBLIC_PROTOCOL_ERRORS.get(raw.get('detail') if isinstance(raw.get('detail'), str) else '',
         ('agent_execution_failure', 'The agent could not complete this stage. Review the runtime logs for further diagnostics.'))
+    if raw.get('type') == 'MaxTokensReachedException':
+        code, detail = ('model_token_limit', 'The model reached its response token limit before completing the structured reply. This stage did not complete.')
     return dict(code=code, detail=detail,
-                type=raw.get('type') if raw.get('type') in ('ProtocolError', 'RuntimeError', 'TimeoutError', 'ValueError') else record.get('error_type', 'ExecutionError'),
+                type=raw.get('type') if raw.get('type') in ('ProtocolError', 'RuntimeError', 'TimeoutError', 'ValueError', 'MaxTokensReachedException') else record.get('error_type', 'ExecutionError'),
                 source='result-' + record['stage'].replace(':', '-') + '.json:response.workflow_error' if raw else
                        'result-' + record['stage'].replace(':', '-') + '.json')
 

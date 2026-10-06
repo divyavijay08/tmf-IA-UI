@@ -56,3 +56,9 @@ class FailureDiagnostics(unittest.TestCase):
         w=self.project({'type':'SecretCustomException','detail':'private prompt bearer secret'})
         self.assertNotIn('secret',json.dumps(w).lower())
         self.assertEqual(w['stages'][3]['diagnostic']['code'],'agent_execution_failure')
+
+    def test_token_limit_is_explained_without_exposing_exception_text(self):
+        w=self.project({'type':'MaxTokensReachedException','detail':'private model output'})
+        self.assertEqual(w['stages'][3]['diagnostic']['code'],'model_token_limit')
+        self.assertEqual(w['stages'][3]['diagnostic']['type'],'MaxTokensReachedException')
+        self.assertNotIn('private model output',json.dumps(w))
