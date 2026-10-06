@@ -13,6 +13,30 @@ CALL_FIELDS = ('actor', 'attempt_id', 'logical_call_id', 'invocation_id', 'run_i
                'completed_at', 'request_tool_name', 'threshold_version', 'response_truncated')
 
 
+# Never expose arbitrary runtime exception text, which may include prompts or secrets.
+PUBLIC_PROTOCOL_ERRORS = {
+    'formatting changed authoritative findings or outcome': (
+        'formatting_changed_findings',
+        'The customer reply changed validated specialist findings or the outcome. '
+        'The response was rejected to preserve the recorded evidence.'),
+    'model did not return workflow JSON': ('invalid_workflow_json', 'The agent did not return the required structured response.'),
+    'result identity does not match request': ('response_identity_mismatch', 'The agent response did not match this invocation.'),
+}
+
+
+def stage_diagnostic(record, response):
+    if record.get('status') != 'failed':
+        return None
+    raw = response.get('workflow_error')
+    raw = raw if isinstance(raw, dict) else {}
+    code, detail = PUBLIC_PROTOCOL_ERRORS.get(raw.get('detail') if isinstance(raw.get('detail'), str) else '',
+        ('agent_execution_failure', 'The agent could not complete this stage. Review the runtime logs for further diagnostics.'))
+    return dict(code=code, detail=detail,
+                type=raw.get('type') if raw.get('type') in ('ProtocolError', 'RuntimeError', 'TimeoutError', 'ValueError') else record.get('error_type', 'ExecutionError'),
+                source='result-' + record['stage'].replace(':', '-') + '.json:response.workflow_error' if raw else
+                       'result-' + record['stage'].replace(':', '-') + '.json')
+
+
 def read(path):
     return json.loads(path.read_text()) if path.exists() else {}
 
@@ -91,10 +115,14 @@ def load_workflow(root):
             projected.update(outcome=result['outcome'], routing=result['routing'])
             if stage != 'customer:response':
                 findings.append(dict(stage=stage, invocation_id=record['invocation_id'], **content(result['content'])))
+        diagnostic = stage_diagnostic(record, response)
+        if diagnostic:
+            projected['diagnostic'] = diagnostic
         stages.append(projected)
         if record.get('status') == 'failed':
             failures.append(dict(actor=record.get('actor'), stage=stage, invocation_id=record.get('invocation_id'),
-                                 outcome='execution_failure', error=record.get('reason')))
+                                 outcome='execution_failure', error=record.get('reason'), trace_id=report.get('trace_id'),
+                                 error_type=record.get('error_type'), diagnostic=diagnostic))
         attempts = response.get('transport_attempts', [])
         if not isinstance(attempts, list) or any(not isinstance(a, dict) for a in attempts):
             raise ValueError('Invalid transport records')

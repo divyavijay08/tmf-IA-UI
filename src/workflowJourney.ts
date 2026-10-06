@@ -5,9 +5,11 @@ export const stageNames:Record<string,string>={
 };
 export const outcomeNames:Record<string,string>={answered:'Response ready',insufficient_information:'More information needed',human_approval_required:'Human approval required',execution_failure:'Investigation incomplete'};
 export type WorkflowFinding={stage:string;invocation_id:string;answer:string;findings:string[];evidence_references:string[];unresolved_issues:string[];limitations:string[];recommended_next_steps:string[]};
-export type WorkflowStage={stage:string;role:string;actor:string;status:string;invoked:boolean;invocation_id?:string|null;reason?:string;routing_reason?:string;routing?:string;outcome?:string;started_at?:string;completed_at?:string;evidence_errors:string[]};
+export type WorkflowDiagnostic={code:string;type:string;detail:string;source:string};
+export type WorkflowFailure={stage:string;invocation_id?:string;trace_id?:string;kind?:string;outcome?:string;http_status?:number;attempt_id?:string;error?:string|null};
+export type WorkflowStage={stage:string;role:string;actor:string;status:string;invoked:boolean;invocation_id?:string|null;reason?:string;routing_reason?:string;routing?:string;outcome?:string;started_at?:string;completed_at?:string;evidence_errors:string[];error_type?:string;diagnostic?:WorkflowDiagnostic};
 export type WorkflowEvent={id:string;stage:string;invocation_id?:string;trace_id?:string;kind?:string;request_tool_name?:string;outcome?:string;http_status?:number;time?:string};
-export type AgentWorkflow={version:'agent-workflow/v1';mode:'workflow';status:string;outcome?:string|null;finalAnswer:string;traceId:string;assessmentStatus:string;stages:WorkflowStage[];findings:WorkflowFinding[];events?:WorkflowEvent[]};
+export type AgentWorkflow={version:'agent-workflow/v1';mode:'workflow';status:string;outcome?:string|null;finalAnswer:string;traceId:string;assessmentStatus:string;stages:WorkflowStage[];findings:WorkflowFinding[];events?:WorkflowEvent[];failures?:WorkflowFailure[]};
 const strings=(v:unknown):v is string[]=>Array.isArray(v)&&v.every(x=>typeof x==='string');
 export function parseWorkflow(value:unknown,traceId?:string):AgentWorkflow|null{
  if(value==null)return null;
@@ -17,11 +19,13 @@ export function parseWorkflow(value:unknown,traceId?:string):AgentWorkflow|null{
  if(['completed','failed'].includes(w.status)&&!w.outcome)throw Error('Completed workflow evidence is missing its outcome.');
  for(const [index,s] of w.stages.entries()){
   if(s.stage!==Object.keys(stageNames)[index]||s.role!==s.stage.split(':')[0]||typeof s.actor!=='string'||typeof s.invoked!=='boolean'||!['pending','running','interrupted','completed','failed','unnecessary'].includes(s.status)||!strings(s.evidence_errors)||s.invoked&&typeof s.invocation_id!=='string')throw Error('Workflow stage evidence is invalid.');
+  if(s.diagnostic&&(!['code','type','detail','source'].every(k=>typeof s.diagnostic![k as keyof WorkflowDiagnostic]==='string')||s.status!=='failed'))throw Error('Workflow diagnostic is invalid.');
   const allowed=s.stage==='customer:triage'?['finish','request_it']:s.stage==='it:analysis'?['finish','request_network']:['finish'];
   if(s.routing&&!allowed.includes(s.routing))throw Error('Workflow routing evidence is invalid.');
  }
  for(const f of w.findings){const s=w.stages.find(s=>s.stage===f.stage);if(!s||s.invocation_id!==f.invocation_id||typeof f.answer!=='string'||!['findings','evidence_references','unresolved_issues','limitations','recommended_next_steps'].every(k=>strings(f[k as keyof WorkflowFinding])))throw Error('Workflow findings do not match the recorded stage.');}
  if(w.events!=null&&(!Array.isArray(w.events)||w.events.some(e=>!w.stages.some(s=>s.stage===e.stage&&s.invocation_id===e.invocation_id)||e.trace_id&&e.trace_id!==w.traceId)))throw Error('Workflow events do not match this conversation.');
+ if(w.failures!=null&&(!Array.isArray(w.failures)||w.failures.some(f=>!w.stages.some(s=>s.stage===f.stage&&s.invocation_id===f.invocation_id)||f.trace_id&&f.trace_id!==w.traceId)))throw Error('Workflow failures do not match this conversation.');
  return w;
 }
 export function workflowAnswer(workflow:AgentWorkflow|null,legacyAnswer?:string){return workflow?workflow.finalAnswer:legacyAnswer||'';}

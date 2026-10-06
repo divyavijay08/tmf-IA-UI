@@ -28,3 +28,31 @@ class WorkflowProjection(unittest.TestCase):
             self.assertNotIn('private', json.dumps(event))
 
 if __name__ == '__main__': unittest.main()
+
+class FailureDiagnostics(unittest.TestCase):
+    def project(self, error):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stages = [dict(stage=s, role=s.split(':')[0], actor=s.split(':')[0], invocation_id=f'inv-{i}',
+                status='failed' if i == 3 else 'completed', invoked=True, error_type='RuntimeError',
+                reason='execution_failure' if i == 3 else 'finish',
+                response={'workflow_error':error} if i == 3 else {'transport_attempts':[
+                    dict(kind='other', outcome='error', http_status=405, invocation_id=f'inv-{i}') ]})
+                for i,s in enumerate(STAGES)]
+            (root/'workflow.json').write_text(json.dumps(dict(version=VERSION, run_id=root.name,
+                trace_id='a'*32,status='failed',outcome='execution_failure',stages=stages)))
+            return load_workflow(root)
+
+    def test_failed_formatter_has_diagnostic_without_failed_model_span(self):
+        w=self.project({'type':'ProtocolError','detail':'formatting changed authoritative findings or outcome'})
+        self.assertEqual(w['stages'][3]['diagnostic']['code'],'formatting_changed_findings')
+        self.assertEqual(w['stages'][3]['diagnostic']['type'],'ProtocolError')
+        self.assertEqual(len(w['failures']),4)
+        self.assertEqual(w['failures'][-1]['trace_id'],'a'*32)
+        self.assertEqual(w['stages'][0]['status'],'completed')
+        self.assertNotIn('diagnostic',w['stages'][0])
+
+    def test_unknown_exception_payload_is_not_exposed(self):
+        w=self.project({'type':'SecretCustomException','detail':'private prompt bearer secret'})
+        self.assertNotIn('secret',json.dumps(w).lower())
+        self.assertEqual(w['stages'][3]['diagnostic']['code'],'agent_execution_failure')

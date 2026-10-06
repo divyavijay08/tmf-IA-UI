@@ -2,7 +2,7 @@ import {useMemo,useState} from 'react';
 import type {CloudSpan} from './cloudwatchData';
 import {spanDetails,spanType} from './conversationEvidence';
 import {traceHierarchy} from './traceHierarchy';
-import {TraceTopology} from './TraceTopology';
+import {TraceTopology} from './TraceTopologyView';
 
 export function ConversationTrace({spans,visibleIds,selected,onSelect}:{spans:CloudSpan[];visibleIds:Set<string>;selected?:string;onSelect:(id:string)=>void}){
  const [view,setView]=useState<'Tree'|'Timeline'>('Timeline'),[format,setFormat]=useState<'Form'|'JSON'>('Form'),[collapsed,setCollapsed]=useState<Set<string>>(new Set());

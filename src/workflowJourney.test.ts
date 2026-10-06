@@ -10,3 +10,12 @@ test('findings must belong to the matching invocation',()=>{const v=fixture();Ob
 test('only actual tool records appear as tool calls',()=>{const v=fixture();Object.assign(v,{events:['model','tool','other'].map((kind,i)=>({id:String(i),stage:'customer:triage',invocation_id:'run:customer:triage',trace_id:trace,kind}))});assert.equal(workflowTools(parseWorkflow(v)!).length,1);});
 test('old executions remain compatible; malformed new evidence cannot use a success fallback',()=>{assert.equal(workflowAnswer(parseWorkflow(undefined),'Old answer'),'Old answer');assert.throws(()=>parseWorkflow({mode:'workflow'}));});
 test('terminal workflow needs a business outcome, but progress does not',()=>{const v=fixture();Object.assign(v,{outcome:null});assert.throws(()=>parseWorkflow(v));v.status='running';assert.equal(parseWorkflow(v)!.outcome,null);v.status='interrupted';assert.equal(parseWorkflow(v)!.status,'interrupted');});
+test('workflow diagnostics retain a failed stage even with no failed spans',()=>{
+ const v=fixture();Object.assign(v.stages[0],{diagnostic:{code:'formatting_changed_findings',type:'ProtocolError',detail:'Validated findings changed.',source:'stage artifact'}});
+ Object.assign(v,{failures:[{stage:'customer:triage',invocation_id:'run:customer:triage',trace_id:trace,outcome:'execution_failure'}]});
+ const w=parseWorkflow(v)!;assert.equal(w.stages[0].diagnostic?.type,'ProtocolError');assert.equal(w.failures?.length,1);
+});
+test('rejects diagnostics from another conversation or invocation',()=>{
+ const v=fixture();Object.assign(v,{failures:[{stage:'customer:triage',invocation_id:'other',trace_id:trace}]});assert.throws(()=>parseWorkflow(v));
+ Object.assign(v,{failures:[{stage:'customer:triage',invocation_id:'run:customer:triage',trace_id:'b'.repeat(32)}]});assert.throws(()=>parseWorkflow(v));
+});
