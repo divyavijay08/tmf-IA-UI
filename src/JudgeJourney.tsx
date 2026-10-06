@@ -8,7 +8,6 @@ import {ThinkingState} from './aicss/ThinkingState';
 import './judge-chat.css';
 import {VoiceInput} from './VoiceInput';
 import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
-import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import type {AssuranceData,AssuranceRun} from './assuranceData';
 import {workflowStatus} from './assuranceData';
 import {parseWorkflow,workflowAnswer,stageNames,outcomeNames,stageState,workflowTools,type AgentWorkflow} from './workflowJourney';
@@ -27,12 +26,13 @@ const isActive=(state?:string)=>!!state&&['queued','running','collecting'].inclu
 const verdict=(value:unknown)=>value==null?'Not assessed':String(value);
 const verdictClass=(value:unknown)=>['SATISFIED','PASS'].includes(String(value))?'good':['NOT SATISFIED','BREACH'].includes(String(value))?'bad':'unknown';
 const display=(value:unknown)=>value==null?'Awaiting evidence':typeof value==='number'?value.toLocaleString():String(value);
-const actorFor=(span:CloudSpan)=>span.tool?.includes('customer')?'Customer service agent':span.tool?.includes('runbook')?'IT resolution agent':span.tool?.includes('network')?'Network agent':span.service||'Agent';
+const actorFor=(span:CloudSpan)=>span.service||'Unidentified service';
 
 
 function AgentEvent({span}:{span:CloudSpan}){
- const actor=actorFor(span),tool=span.operation==='execute_tool'||!!span.tool,failed=(span.httpStatus||0)>=400||span.status?.toLowerCase()==='error';
- return <div className="journey-event"><CheckCircleOutline aria-hidden="true"/><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{tool?'Tool call':'Agent activity'} · <code>{span.tool||span.name}</code></p></div><span className="journey-event-ok"><CheckCircleOutline/> {failed?'Recorded error':'Recorded'}</span></div>;
+ const actor=actorFor(span),tool=span.operation==='execute_tool'||!!span.tool,model=!!span.model||span.operation==='chat';
+ const failed=span.status?.toUpperCase()==='ERROR'||Number(span.httpStatus)>=400;
+ return <div className="journey-event"><span aria-hidden="true">{failed?'!':'•'}</span><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{tool?'Tool call':model?'Model request':'Service request'} · <code>{span.tool||span.name}</code></p>{span.model&&<p>{span.model}{span.totalTokens!=null?` · ${span.totalTokens.toLocaleString()} tokens`:''}</p>}</div><span className="journey-event-status" data-error={failed}>{failed?'Recorded error':'Recorded'}</span></div>;
 }
 
 export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTelemetry}:JourneyProps){
@@ -44,7 +44,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
  const job=jobs.find(x=>x.id===jobId);
  const {workflow,workflowError}=useMemo(()=>{try{return {workflow:parseWorkflow(job?.workflow,job?.traceId),workflowError:''}}catch(e){return {workflow:null,workflowError:(e as Error).message}}},[job]);
  const traceId=workflow?.traceId||job?.traceId||'',answer=workflowError?'':workflowAnswer(workflow,job?.answer);
- const [traceNotice,setTraceNotice]=useState('');
+ const [traceNotice,setTraceNotice]=useState(''),[traceLoading,setTraceLoading]=useState(false),[traceRefresh,setTraceRefresh]=useState(0),[traceReadAt,setTraceReadAt]=useState('');
  const matchedRun=useMemo(()=>data?.runs.find(r=>r.id===job?.runId)||data?.runs.find(r=>r.events.some(e=>e.trace_id===traceId)),[data,job?.runId,traceId]);
 
  useEffect(()=>{
@@ -66,20 +66,23 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
   void refresh();return()=>{cancelled=true;controller.abort();clearTimeout(timer)};
  },[jobId]);
  useEffect(()=>{
+  setSpans([]);setSelectedSpan('');setTraceNotice('');setTraceReadAt('');setTraceLoading(false);
   if(!traceId||!job)return;
   let cancelled=false;let timer:ReturnType<typeof setTimeout>|undefined;const controller=new AbortController();
   const createdAt=job.createdAt,finishedAt=job.finishedAt;
   async function loadTrace(){
+   setTraceLoading(true);
    try{
     const from=new Date(Date.parse(createdAt)-60_000),to=new Date(finishedAt?Date.parse(finishedAt)+60_000:Date.now());
     const r=await fetch('api/conversation-trace?'+new URLSearchParams({traceId,from:from.toISOString(),to:to.toISOString()}),{cache:'no-store',signal:controller.signal});
     if(!r.ok)throw Error('Trace service is unavailable.');
-    if(!cancelled){const capture=parseCloudCapture(await r.json());const linked=capture.spans.filter(s=>s.traceId===traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime));setSpans(linked);setTraceNotice((capture.complete===false?'Partial CloudWatch evidence. ':linked.length?'':'No matching spans have arrived yet. ')+capture.coverage);}
-   }catch{if(!cancelled)setTraceNotice('CloudWatch evidence is unavailable. Recorded workflow stages remain visible.');}
+    const capture=parseCloudCapture(await r.json());if(!cancelled){const linked=capture.spans.filter(s=>s.traceId===traceId).sort((a,b)=>Date.parse(a.startTime)-Date.parse(b.startTime));setSpans(linked);setTraceReadAt(new Date().toISOString());setTraceNotice((capture.complete===false?'Partial CloudWatch evidence. ':linked.length?'':'No matching spans have arrived yet. ')+capture.coverage);}
+   }catch{if(!cancelled)setTraceNotice('CloudWatch evidence is unavailable. Recorded workflow stages remain visible. Retry with Refresh evidence.');}
+   finally{if(!cancelled)setTraceLoading(false);}
    if(!cancelled&&(!finishedAt||Date.now()<Date.parse(finishedAt)+90_000))timer=setTimeout(()=>void loadTrace(),15000);
   }
   void loadTrace();return()=>{cancelled=true;controller.abort();clearTimeout(timer)};
- },[traceId,job?.createdAt,job?.finishedAt]);
+ },[traceId,job?.id,job?.createdAt,job?.finishedAt,traceRefresh]);
  async function launch(){
   if(!prompt.trim()||busy.current||!config?.chatEnabled||isActive(job?.state))return;
   const sentPrompt=prompt,parentId=job?.kind==='chat'&&job.state==='completed'&&job.answer?job.id:undefined;busy.current=true;setLaunching(true);setError('');setTab('Conversation');
@@ -91,6 +94,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
  }
  const visible=spans.filter(s=>s.traceId===traceId);
  const toolSpans=visible.filter(s=>s.operation==='execute_tool'||s.tool);
+ const modelSpans=visible.filter(s=>!s.tool&&s.operation!=='execute_tool'&&(s.model||s.operation==='chat'));
 
  return <section className="judge-journey judge-chat-shell">
   <aside className="chat-history">
@@ -104,6 +108,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
   <div className="chat-workspace">
    <header className="chat-topbar"><div><strong>{job?'Service investigation':'Alpha assistant'}</strong>{job&&<span className="chat-status">{workflow?.outcome?outcomeNames[workflow.outcome]:job.state}</span>}</div><div className="chat-view-tabs"><button aria-pressed={tab==='Conversation'} onClick={()=>setTab('Conversation')}>Conversation</button>{job&&<button aria-pressed={tab==='Trace & controls'} onClick={()=>setTab('Trace & controls')}>Trace & controls</button>}</div></header>
    {error&&<Alert severity="warning">{error}</Alert>}
+   {job&&<div className="chat-trace-status" aria-live="polite"><div><strong>{traceLoading?'Loading trace evidence…':traceReadAt?`${visible.length} spans · ${modelSpans.length} model requests · ${toolSpans.length} tool-related spans`:traceId?'Trace evidence unavailable':'Awaiting a conversation trace ID'}</strong><small>{traceNotice||'Recorded workflow activity is independent of CloudWatch ingestion.'}{traceReadAt&&` Last read ${new Date(traceReadAt).toLocaleTimeString()}.`}</small></div><Button disabled={!traceId||traceLoading} onClick={()=>{setTraceRefresh(n=>n+1);refreshRef.current()}}>Refresh evidence</Button></div>}
    {tab==='Conversation'?<div className={`chat-conversation ${job?'has-conversation':'is-empty'}`}>
     {!job?<div className="chat-welcome"><span className="chat-welcome-eyebrow">TEAM ALPHA</span><h1>Let’s investigate together.</h1><p>Your customer, IT and network agents. One connected investigation.</p></div>:<div className="chat-transcript">
      {job.history?.map((turn,index)=><div key={index} className={turn.role==='user'?'chat-user-message':'chat-answer'}>{turn.content}</div>)}
@@ -114,8 +119,8 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
      {job.journeyError&&<Alert severity="warning">{job.journeyError}</Alert>}
      {answer&&<div className="chat-answer">{answer}</div>}
      {isActive(job.state)?<div className="chat-processing">{!answer&&<ThinkingState/>}<span>{answer?'Collecting trace evidence':(workflow?.stages.find(s=>s.status==='running')?stageNames[workflow.stages.find(s=>s.status==='running')!.stage]:job.journey?.find(s=>s.state==='running')?.title||'Starting investigation')}</span></div>:!answer&&!workflowError&&<p>{job.kind==='chat'?'No agent answer was returned.':'Saved scenario execution. No chat message was sent for this run.'}</p>}
-     <details className="chat-activity" open={isActive(job.state)}><summary>CloudWatch activity <span>{toolSpans.length} tool-related spans</span></summary><div className="journey-events">{toolSpans.length?toolSpans.map(s=><AgentEvent key={s.traceId+s.spanId} span={s}/>):<p>No tool spans loaded for this conversation yet.</p>}</div></details>
-     {traceNotice&&<p className="chat-run-message">{traceNotice}</p>}{!workflow&&job.message&&<p className="chat-run-message">{job.message}</p>}
+     <details className="chat-activity" open={isActive(job.state)}><summary>CloudWatch activity <span>{visible.length} recorded spans</span></summary><div className="journey-events">{visible.length?visible.map(s=><AgentEvent key={s.traceId+s.spanId} span={s}/>):<p>{traceLoading?'Loading recorded activity…':traceReadAt?'No matching spans have arrived yet. Refresh to check for late-ingested evidence.':'Trace evidence has not loaded. See the connection status above.'}</p>}</div></details>
+     {!workflow&&job.message&&<p className="chat-run-message">{job.message}</p>}
      {job.traceId&&<div className="chat-evidence-links"><Button onClick={()=>setTab('Trace & controls')}>Explore trace & controls</Button><Button component="a" href={CLOUDWATCH.replace(REFERENCE_TRACE,job.traceId)} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewOutlined/>}>CloudWatch</Button></div>}
     </div>}
     <div className="chat-compose-area"><form className="chat-compose" onSubmit={e=>{e.preventDefault();void launch()}}><textarea aria-label="Message the customer service agent" placeholder="Ask Alpha about a service issue…" rows={2} maxLength={3000} value={prompt} onChange={e=>setPrompt(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(!launching&&config?.chatEnabled&&!isActive(job?.state))void launch()}}}/><div className="chat-compose-toolbar"><span className="chat-model" aria-label="Model: NVIDIA Nemotron Super 120B"><span className="chat-model-brand">NVIDIA</span><strong>Nemotron Super 120B</strong><span className="chat-model-label">Customer service</span></span><div className="chat-compose-actions"><VoiceInput value={prompt} onChange={setPrompt} disabled={launching||isActive(job?.state)}/><button type="submit" aria-label="Send message" disabled={launching||!config?.chatEnabled||!prompt.trim()||isActive(job?.state)}><ArrowUpwardRounded/></button></div></div></form>
@@ -131,7 +136,7 @@ function TraceControls({spans,selected,onSelected,run,job,workflow,traceNotice,o
  return <div className="journey-trace-layout">
   <div>{workflow&&<WorkflowActivity workflow={workflow} journey={job?.journey}/>}<SpanWaterfall spans={spans} selected={chosen?.spanId} onSelect={onSelected}/><section className="wa-panel journey-trajectory"><header><h2>Multi-agent trajectory</h2><span>Tool and delegation evidence</span></header><div className="trajectory-flow">{workflow?workflow.stages.filter(s=>s.invoked).map(s=><span key={s.stage}>{stageNames[s.stage]} · {stageState(s,workflow)}</span>):spans.length?Array.from(new Set(spans.map(actorFor))).map(actor=><span key={actor}>{actor}</span>):<span>Waiting for trace-linked agent activity</span>}</div><footer>{spans.length} spans loaded for this conversation. {traceNotice}</footer></section></div>
   <aside>
-   <section className="wa-panel journey-span-detail"><header><h2>Selected span</h2><span>{chosen?.service}</span></header>{chosen&&<dl>{Object.entries({'Operation':chosen.name,'Trace ID':chosen.traceId,'Span ID':chosen.spanId,'Parent':chosen.parentSpanId,'Duration':`${chosen.durationMs.toFixed(1)} ms`,'Tool':chosen.tool,'Model':chosen.model,'Tokens':chosen.totalTokens}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{display(v)}</dd></div>)}</dl>}</section>
+   <section className="wa-panel journey-span-detail"><header><h2>Selected span</h2><span>{chosen?.service}</span></header>{chosen&&<dl>{Object.entries({'Operation':chosen.name,'Trace ID':chosen.traceId,'Span ID':chosen.spanId,'Parent':chosen.parentSpanId,'Duration':`${chosen.durationMs.toFixed(1)} ms`,'Tool':chosen.tool,'Model':chosen.model,'Input tokens':chosen.inputTokens,'Output tokens':chosen.outputTokens,'Tokens':chosen.totalTokens,'Status':chosen.status,'HTTP status':chosen.httpStatus}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{display(v)}</dd></div>)}</dl>}</section>
    <section className="wa-panel journey-controls"><header><h2>Control evidence</h2><span>{run?.id||'No collected run match'}</span></header>{controls.map(([id,name,result])=><div key={id}><span><b>C{id}</b><small>{name}</small></span><em className={`wa-badge ${verdictClass(result?.verdict)}`}>{verdict(result?.verdict)}</em></div>)}{workflow?<Alert severity="info">This workflow has not been assessed for C7, C16 or C9. Runtime recording and spend protections are separate from combined control verdicts.</Alert>:run?<div className="journey-control-actions"><Button onClick={()=>onOpenControls(run.id)}>Inspect controls</Button><Button onClick={()=>onOpenTelemetry(run.id)}>Open trace explorer</Button></div>:<Alert severity="info">No collected control record is linked to this conversation in the current evidence response.</Alert>}</section>
    <section className="wa-panel journey-outcome"><header><h2>Finding & outcome</h2><span>Judge close-out</span></header><p><b>Workflow:</b> {workflow?.outcome?outcomeNames[workflow.outcome]:run?workflowStatus(run):'Awaiting linked run evidence.'}</p><p><b>ServiceNow:</b> {run&&[run.c7,run.c16,run.c9].some(x=>['BREACH','NOT SATISFIED'].includes(String(x?.verdict)))?'A failed control needs a matching finding reference.':'No verified run-to-finding link is available.'}</p><p><b>Business outcome:</b> Investigation evidence is available; time saved and prevented loss still require a measured baseline.</p><div className="journey-control-actions">{run&&<Button onClick={()=>onOpenRun(run.id)}>Open run evidence</Button>}<Button component="a" href={workshopLinks.servicenow} target="_blank" rel="noopener noreferrer">Open Team Alpha ServiceNow ↗</Button></div></section>
   </aside>

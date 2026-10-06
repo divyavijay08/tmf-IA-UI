@@ -54,3 +54,9 @@ html .wa-app:has(.judge-chat-shell) .wa-layout,html .wa-app:has(.judge-chat-shel
 .chat-stage-findings{font-size:12px;line-height:1.6;margin:14px 0}.chat-stage-findings ul{padding-left:18px}.chat-stage-findings li{margin:5px 0;overflow-wrap:anywhere}
 .chat-stage-identity{font-size:11px;color:var(--muted);border-top:1px solid var(--border);padding-top:12px}.chat-stage-identity>div{display:flex;gap:12px;margin:5px 0}.chat-stage-identity dt{flex:0 0 65px}.chat-stage-identity dd{margin:0;overflow-wrap:anywhere}
 .chat-journey-footer{border-top:1px solid var(--border);padding-top:12px;margin-top:12px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}.chat-journey-footer code{font-size:10px;overflow-wrap:anywhere}
+
+/* Conversation evidence is a read-only view; it never dispatches the workflow. */
+.chat-trace-status{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.chat-trace-status>div{display:grid;gap:4px;min-width:0}.chat-trace-status strong{font-size:12px}.chat-trace-status small{font-size:11px;color:var(--muted);line-height:1.5}.chat-trace-status button{flex-shrink:0}
+.journey-event-status{font-size:11px;color:var(--muted)}.journey-event-status[data-error=true]{color:var(--status-breach,#e26b65)}
+@media(max-width:600px){.chat-trace-status{padding:12px;align-items:flex-start;flex-direction:column;gap:8px}}
