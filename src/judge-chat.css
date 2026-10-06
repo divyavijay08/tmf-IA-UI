@@ -176,7 +176,7 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
 .wa-app .chat-inspector .journey-controls>.control-explanation {display:block;padding:18px 20px;background:color-mix(in srgb,var(--surface),var(--primary) 4%);border-bottom:1px solid var(--border)}
 .control-explanation strong {font-size:13px;font-weight:600}
 .control-explanation p {font-size:12px;line-height:1.7;color:var(--muted);margin:5px 0 0;max-width:1000px}
-.wa-app .chat-inspector .journey-controls>.conversation-control-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch;gap:0;padding:0;border:0}
+.wa-app .chat-inspector .journey-controls>.conversation-control-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));align-items:stretch;gap:0;padding:0;border:0}
 .conversation-control-card {padding:20px;min-width:0;border-right:1px solid var(--border)}
 .conversation-control-card:last-child {border-right:0}
 .conversation-control-card>header {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;min-height:48px}
@@ -188,7 +188,7 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
 .control-verdict.bad {background:var(--status-breach-bg);color:var(--status-breach)}
 .conversation-control-card h4 {font-size:10px;letter-spacing:.055em;text-transform:uppercase;font-weight:600;color:var(--muted);margin:0 0 8px}
 .conversation-control-card p {font-size:13px;line-height:1.7;margin:0;overflow-wrap:anywhere}
-.control-telemetry {min-height:132px}
+.control-telemetry {min-height:0}
 .control-requirement {margin-top:18px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted)}
 .wa-app .chat-inspector .journey-controls>footer {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid var(--border)}
 .journey-controls>footer>.journey-control-actions {padding:0}
