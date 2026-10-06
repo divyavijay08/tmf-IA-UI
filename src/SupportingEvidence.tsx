@@ -1,4 +1,4 @@
-import {evidenceFields} from './recordedEvidence';
+import {evidenceFields,assessmentLabel} from './recordedEvidence';
 import {MetricCard,type MetricIcon} from './MetricCard';
 import {statusClass} from './controlQuery';
 import type {AssuranceRun} from './assuranceData';
@@ -10,7 +10,7 @@ export function SupportingEvidence({run,control}:{run:AssuranceRun;control:strin
  const fields=control==='7'?{'Recorded transport events':run.c7.recorded_event_count,'Expected events':run.c7.expected_count,'Observed events':run.c7.observed_count,'Threshold version':run.c7.threshold_version,'Missing IDs':run.c7.missing_ids}:control==='9'?{'Baseline version':run.qualityBaseline?.version,'Comparison windows':run.qualityWindows?.length,'Metric':run.c9?.metric,'Threshold version':run.c9?.['threshold.version']}:{'Measured tokens':run.c16['measured.value'],'Threshold tokens':run.c16['threshold.value'],'Threshold version':run.c16['threshold.version'],'Reserved tokens':run.budget.reserved};
  const notes=[...(report.warnings??[]),...(report.findings??[])];
  return <section className="wa-panel supporting-evidence">
-  <header><h2>Control {control} · Supporting evidence</h2><span className={`wa-badge ${statusClass(report.verdict)}`}>{statusClass(report.verdict)==='good'?'✓ ':''}{report.verdict??'Not assessed'}</span></header>
+  <header><h2>Control {control} · Supporting evidence</h2><span className={`wa-badge ${statusClass(report.verdict)}`}>{statusClass(report.verdict)==='good'?'✓ ':''}{assessmentLabel(report)}</span></header>
   {<div className="supporting-body">
    {!evidenceFields(fields).length&&<p>No assessed measurements are attached to this run. See the independent query for available records and evidence gaps.</p>}
    <div className="wa-statstrip supporting-metrics">{evidenceFields(fields).map(([label,value],index)=><MetricCard key={label} label={label} value={display(value)} icon={(['records','budget','verified','records'] as MetricIcon[])[index]}/>)}</div>

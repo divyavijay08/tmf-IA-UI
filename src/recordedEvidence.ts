@@ -29,6 +29,11 @@ export function hasEvidence(value: unknown): boolean {
 }
 export const evidenceFields = (fields: Record<string, unknown>) => Object.entries(fields).filter(([,v])=>hasEvidence(v));
 
+export function assessmentLabel(report:Record<string,any>){
+ if(report.assessment_kind==='evidence_readiness')return report.verdict==='NO EVIDENCE'?'Assessment inputs needed':'Assessment pending';
+ return report.verdict==='NO EVIDENCE'?'Assessment incomplete':report.verdict??'Not evaluated';
+}
+
 // Transport records only: do not add parent-agent spans or merge another source's totals.
 export function recordedModelUsage(events: AssuranceEvent[]) {
  const calls=new Map<string,{input:number;output:number}>(), conflicts=new Set<string>();

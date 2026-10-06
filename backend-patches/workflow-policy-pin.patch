@@ -1,0 +1,23 @@
+--- a/tools/ticketing/hooks.py
++++ b/tools/ticketing/hooks.py
+@@ -40,6 +40,8 @@
+     """Use the coordinator's actual payload identity and existing refusal exception."""
+     def __init__(self, root, register, source=None):
+         self.root=Path(root);self.register=register;self.source=source
++        from tools.control16.watch import register_entry
++        self.entry=dict(register_entry(register));self.policy_pinned_at=now()
+         self.live=None;self.watcher=None;self.visibility=None;self.started=time.monotonic()
+ 
+     def persist(self, *_):
+@@ -51,9 +53,9 @@
+         from .service import atomic
+         trace=payload['traceparent'].split('-')[1]
+         if self.live is None:
+-            entry=register_entry(self.register)
++            entry=self.entry
+             self.watcher=Watcher(threshold_from_register(entry),[trace],payload['correlation_id'],now=now)
+-            atomic(self.root/'c16-threshold.json',dict(entry,control_id='16',pinned_at=now()))
++            atomic(self.root/'c16-threshold.json',dict(entry,control_id='16',pinned_at=self.policy_pinned_at))
+             kwargs=dict(on_poll=self.persist)
+             if self.source is not None:kwargs['source']=self.source
+             self.live=LiveWatch(self.watcher,self.started,time.monotonic,**kwargs)
