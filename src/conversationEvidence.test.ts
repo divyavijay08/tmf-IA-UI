@@ -25,6 +25,10 @@ test('workflow mode does not hide recorded control verdicts; gaps remain unasses
 test('control results with conflicting run or trace identities cannot be displayed as a pass',()=>{
  const r=run();r.c7={verdict:'PASS',run_id:'other'};r.c16={verdict:'PASS',trace_id:other};r.c9={verdict:'invented'};const c=conversationControls(r,trace);assert.ok(c.every(x=>!x.assessed));assert.match(c[0].detail,/does not match/);
 });
+test('readiness checks are not counted as recorded assessments',()=>{
+ const r=run();r.c16={verdict:'INCONCLUSIVE',assessment_kind:'evidence_readiness',run_id:r.id};
+ const result=conversationControls(r,trace)[1];assert.equal(result.assessed,false);assert.match(result.detail,/incomplete/);
+});
 test('finding references require explicit fields and reject cross-run or cross-trace events',()=>{
  const r=run();const e={id:'e',time:null,source:'record',run_id:r.id,trace_id:trace,servicenow_number:'FND001',servicenow_sys_id:'1'.repeat(32),finding_id:'f1'};r.events=[e,{...e,id:'e2'},{...e,id:'e3',run_id:'other',finding_id:'f2'},{...e,id:'e4',trace_id:other,finding_id:'f3'},{id:'e5',time:null,source:'log',message:'finding created'}];assert.equal(conversationReferences(r,trace).length,1);assert.equal(conversationReferences(r,trace)[0].number,'FND001');assert.deepEqual(conversationReferences(),[]);
 });

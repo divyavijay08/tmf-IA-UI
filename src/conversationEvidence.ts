@@ -36,7 +36,7 @@ export function conversationControls(run?:AssuranceRun,traceId?:string){
   const mismatch=!!report&&((text(report.run_id)&&report.run_id!==run?.id)||(text(report.runId)&&report.runId!==run?.id)||(traceId&&text(report.trace_id)&&report.trace_id!==traceId)||(traceId&&text(report.traceId)&&report.traceId!==traceId));
   const known=['SATISFIED','NOT SATISFIED','PASS','BREACH','NO EVIDENCE','INCONCLUSIVE'];
   const value=!mismatch&&known.includes(report?.verdict)?String(report?.verdict):undefined;
-  return {id,name,verdict:value||'Not assessed',assessed:!!value,detail:mismatch?'Assessment identity does not match this conversation.':value?`Recorded assessment for ${run!.id}.`:run?`No assessment result in the collected run. ${requirement}`:'No matching run evidence is available.',report:mismatch?undefined:report};
+  return {id,name,verdict:value||'Not assessed',assessed:!!value&&report?.assessment_kind!=='evidence_readiness',detail:mismatch?'Assessment identity does not match this conversation.':report?.assessment_kind==='evidence_readiness'?`Assessment inputs are incomplete. ${requirement}`:value?`Recorded assessment for ${run!.id}.`:run?`No assessment result in the collected run. ${requirement}`:'No matching run evidence is available.',report:mismatch?undefined:report};
  });
 }
 export function conversationReferences(run?:AssuranceRun,traceId?:string){

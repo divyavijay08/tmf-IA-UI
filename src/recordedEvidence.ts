@@ -1,4 +1,23 @@
-import type {AssuranceEvent} from './assuranceData.ts';
+import type {AssuranceEvent,AssuranceRun} from './assuranceData.ts';
+
+export function controlSpendSeries(run:AssuranceRun){
+ const gateway=run.c16['evidence.refs'];
+ if(Array.isArray(gateway)&&gateway.length)return {basis:'gateway',calls:gateway,excluded:0};
+ const calls=new Map<string,any>(),conflicts=new Set<string>();let excluded=0;
+ const invocations=new Set(run.workflow.stages?.filter(s=>s.invoked).map(s=>s.invocation_id));
+ for(const e of run.events){
+  if(e.kind!=='model')continue;
+  const id=e.attempt_id,input=e.usage?.input_tokens,output=e.usage?.output_tokens;
+  if(e.run_id!==run.id||!run.workflow.traceId||e.trace_id!==run.workflow.traceId||!invocations.has(e.invocation_id)||
+     typeof id!=='string'||!id||!Number.isFinite(Date.parse(e.time??''))||
+     !Number.isInteger(input)||!Number.isInteger(output)||input<0||output<0){excluded++;continue}
+  const prior=calls.get(id);
+  if(prior&&(prior.input_tokens!==input||prior.output_tokens!==output)){conflicts.add(id);continue}
+  calls.set(id,{call_id:id,at:e.time,input_tokens:input,output_tokens:output,source:e.source});
+ }
+ for(const id of conflicts)calls.delete(id);
+ return {basis:'agent_transport',calls:[...calls.values()].sort((a,b)=>Date.parse(a.at)-Date.parse(b.at)),excluded:excluded+conflicts.size};
+}
 
 export function hasEvidence(value: unknown): boolean {
  if(value == null) return false;
