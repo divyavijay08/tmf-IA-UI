@@ -2,21 +2,19 @@ import {useMemo,useState} from 'react';
 import type {CloudSpan} from './cloudwatchData';
 import {spanDetails,spanType} from './conversationEvidence';
 import {traceHierarchy} from './traceHierarchy';
+import {TraceTopology} from './TraceTopology';
 
 export function ConversationTrace({spans,visibleIds,selected,onSelect}:{spans:CloudSpan[];visibleIds:Set<string>;selected?:string;onSelect:(id:string)=>void}){
  const [view,setView]=useState<'Tree'|'Timeline'>('Timeline'),[format,setFormat]=useState<'Form'|'JSON'>('Form'),[collapsed,setCollapsed]=useState<Set<string>>(new Set());
  const nodes=useMemo(()=>traceHierarchy(spans),[spans]);
  const chosen=nodes.find(n=>n.span.spanId===selected);
- const nodeById=new Map(nodes.map(n=>[n.span.spanId,n]));
- const path=chosen?[...chosen.ancestors.map(id=>nodeById.get(id)!).filter(Boolean),chosen]:[];
- const children=chosen?.children.map(id=>nodeById.get(id)!).filter(Boolean)||[];
  const start=spans.length?Math.min(...spans.map(s=>Date.parse(s.startTime))):0,end=spans.length?Math.max(...spans.map(s=>Date.parse(s.endTime))):0,duration=Math.max(1,end-start);
  const rows=nodes.filter(n=>visibleIds.has(n.span.spanId)&&(visibleIds.size!==spans.length||!n.ancestors.some(id=>collapsed.has(id))));
  function toggle(id:string){setCollapsed(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});}
  const detailGroups=[['Model & usage',['Model','Provider','Input tokens','Output tokens','Total tokens','Total tokens (input + output)','Cache read tokens','Cache write tokens']],['Execution',['Span type','Agent','Service','Operation','Operation type','Tool','MCP method','Error type','Span status','HTTP status']],['Trace identity & timing',['Trace ID','Span ID','Parent','Start (UTC)','End (UTC)','Duration','Run ID','Action ID','Tool call ID']],['CloudWatch source',['Log group','Log stream']]] as const;
  const details=chosen?spanDetails(chosen.span):{};
  const metric=(value:number|undefined)=>value==null?'—':value.toLocaleString();
- const nodeButton=(n:typeof nodes[number],index?:number)=><button key={n.span.spanId} aria-pressed={n.span.spanId===selected} onClick={()=>onSelect(n.span.spanId)} title={`${n.span.name} · ${n.span.spanId}`}><span className="trajectory-node-heading"><span className="trajectory-node-index">{index==null?'↳':String(index+1).padStart(2,'0')}</span><span>{spanType(n.span)}</span>{n.span.spanId===selected&&<em>Selected</em>}</span><b>{n.span.name}</b><small title={n.span.service}>{n.span.service||'Service not recorded'}</small><span className="trajectory-node-duration">{n.span.durationMs>=1000?`${(n.span.durationMs/1000).toFixed(2)} s`:`${n.span.durationMs.toFixed(1)} ms`}</span></button>;
+
  return <div className="conversation-trace-grid">
   <div className="conversation-trace-charts">
    <section className="wa-panel trace-timeline"><header><div className="trace-panel-title"><h2>Spans <span className="trace-count">{spans.length}</span></h2><small>Explore the execution sequence</small></div><div className="trace-switch" aria-label="Trace view">{(['Tree','Timeline'] as const).map(v=><button key={v} aria-pressed={view===v} onClick={()=>setView(v)}>{v}</button>)}</div></header>
@@ -30,7 +28,7 @@ export function ConversationTrace({spans,visibleIds,selected,onSelect}:{spans:Cl
      {!rows.length&&<p className="chat-evidence-note">No spans match this category.</p>}
     </div><footer>Click a span to inspect it. Arrows expand child spans. Nested durations and repeated token counts must not be added together.</footer>
    </section>
-   <section className="wa-panel trace-trajectory"><header><div className="trace-panel-title"><h2>Agent trajectory</h2><small>Execution path to the selected span</small></div><span className="trajectory-path-count">{path.length} {path.length===1?'step':'steps'} · {children.length} direct {children.length===1?'child':'children'}</span></header><div className="trace-path">{chosen?<><ol className="trajectory-chain" aria-label="Path to selected span">{path.map((n,i)=><li key={n.span.spanId}>{nodeButton(n,i)}</li>)}</ol>{children.length>0&&<div className="trajectory-branches"><h3>Direct children <span>{children.length}</span></h3><div>{children.map(n=>nodeButton(n))}</div></div>}</>:<p>Select a span to view its trajectory.</p>}</div><footer>{chosen?.missingParent?'The selected span’s parent was not present in the loaded trace.':'Each step follows a recorded parent–child link. Select a step or child to inspect its details.'}</footer></section>
+   <TraceTopology hierarchy={nodes} selected={chosen?.span.spanId} onSelect={onSelect}/>
   </div>
   <section className="wa-panel journey-span-detail trace-selected"><header><div className="trace-panel-title" aria-live="polite"><span className="trace-eyebrow">Selected span</span><h2>{chosen?.span.name||'Selected span'}</h2><small>{chosen?.span.service}</small></div><div className="trace-switch" aria-label="Span details format">{(['Form','JSON'] as const).map(v=><button key={v} aria-pressed={format===v} onClick={()=>setFormat(v)}>{v}</button>)}</div></header><div className="trace-detail-scroll">{chosen?(format==='JSON'?<pre>{JSON.stringify(chosen.span,null,2)}</pre>:<><div className="trace-metrics" aria-label="Selected span metrics"><div><span>Duration</span><strong>{chosen.span.durationMs>=1000?(chosen.span.durationMs/1000).toFixed(2):chosen.span.durationMs.toFixed(1)}<small>{chosen.span.durationMs>=1000?' s':' ms'}</small></strong></div><div><span>Input tokens</span><strong>{metric(chosen.span.inputTokens)}</strong></div><div><span>Output tokens</span><strong>{metric(chosen.span.outputTokens)}</strong></div></div>{detailGroups.map(([title,keys])=>{const entries=keys.filter(k=>details[k]!=null);return entries.length>0&&<section className="trace-detail-group" key={title}><h3>{title}</h3><dl>{entries.map(k=><div key={k}><dt>{k}</dt><dd className={/ID|Parent|UTC/.test(k)?'trace-mono':''}>{typeof details[k]==='number'?details[k].toLocaleString():details[k]}</dd></div>)}</dl></section>;})}<p className="chat-evidence-note">Metadata for this span. Agent/cycle token counts can repeat model usage. UNSET means no explicit span status was recorded. Raw prompts, session payloads and message bodies are excluded.</p></>):<p className="chat-evidence-note">Select a span to inspect its metadata.</p>}</div></section>
  </div>;
