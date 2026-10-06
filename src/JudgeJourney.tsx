@@ -8,6 +8,7 @@ import {ThinkingState} from './aicss/ThinkingState';
 import './judge-chat.css';
 import {VoiceInput} from './VoiceInput';
 import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
+import {spanType,spanDetails,matchConversationRun,conversationControls,conversationReferences,elapsedSeconds} from './conversationEvidence';
 import type {AssuranceData,AssuranceRun} from './assuranceData';
 import {workflowStatus} from './assuranceData';
 import {parseWorkflow,workflowAnswer,stageNames,outcomeNames,stageState,workflowTools,type AgentWorkflow} from './workflowJourney';
@@ -18,21 +19,20 @@ import {workshopLinks} from './workshopLinks';
 const REFERENCE_TRACE='c0b7e0a31db241a3adf9218c40c6cf8f';
 const CLOUDWATCH=`https://us-east-1.console.aws.amazon.com/cloudwatch/home?region=us-east-1#/gen-ai-observability/spans?traceId=${REFERENCE_TRACE}`;
 type JourneyStage={id:string;role:string;title:string;state:string;startedAt?:string;finishedAt?:string;answer?:string;error?:string;disposition?:string;toolCalls?:{tool_name?:string;request_tool_name?:string;outcome?:string;attempt_id?:string}[]};
-type Job={workflow?:unknown;journey?:JourneyStage[];journeyError?:string;evidenceState?:string;id:string;runId:string;scenario:string;state:string;createdAt:string;finishedAt?:string;message?:string;traceId?:string;invokedAgents?:string[];kind?:string;userMessage?:string;answer?:string;parentId?:string;history?:{role:string;content:string}[]};
+type Job={workflow?:unknown;journey?:JourneyStage[];journeyError?:string;evidenceState?:string;id:string;runId:string;scenario:string;state:string;createdAt:string;startedAt?:string;finishedAt?:string;message?:string;traceId?:string;invokedAgents?:string[];kind?:string;userMessage?:string;answer?:string;parentId?:string;history?:{role:string;content:string}[]};
 type Config={enabled:boolean;chatEnabled?:boolean;scenarios:{id:string;title:string}[];threshold:{version?:string};actors:Record<string,string>};
 type JourneyProps={data:AssuranceData|null;onRefresh:()=>void;onOpenRun:(id:string)=>void;onOpenControls:(id:string)=>void;onOpenTelemetry:(id:string)=>void};
 
 const isActive=(state?:string)=>!!state&&['queued','running','collecting'].includes(state);
-const verdict=(value:unknown)=>value==null?'Not assessed':String(value);
 const verdictClass=(value:unknown)=>['SATISFIED','PASS'].includes(String(value))?'good':['NOT SATISFIED','BREACH'].includes(String(value))?'bad':'unknown';
-const display=(value:unknown)=>value==null?'Awaiting evidence':typeof value==='number'?value.toLocaleString():String(value);
+const display=(value:unknown)=>value==null?'Not recorded':typeof value==='number'?value.toLocaleString():String(value);
 const actorFor=(span:CloudSpan)=>span.service||'Unidentified service';
 
 
 function AgentEvent({span}:{span:CloudSpan}){
- const actor=actorFor(span),tool=span.operation==='execute_tool'||!!span.tool,model=!!span.model||span.operation==='chat';
+ const actor=actorFor(span);
  const failed=span.status?.toUpperCase()==='ERROR'||Number(span.httpStatus)>=400;
- return <div className="journey-event"><span aria-hidden="true">{failed?'!':'•'}</span><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{tool?'Tool call':model?'Model request':'Service request'} · <code>{span.tool||span.name}</code></p>{span.model&&<p>{span.model}{span.totalTokens!=null?` · ${span.totalTokens.toLocaleString()} tokens`:''}</p>}</div><span className="journey-event-status" data-error={failed}>{failed?'Recorded error':'Recorded'}</span></div>;
+ return <div className="journey-event"><span aria-hidden="true">{failed?'!':'•'}</span><div><div className="journey-event-heading"><strong>{actor}</strong><span>{span.durationMs.toFixed(1)} ms</span></div><p>{spanType(span)} · <code>{span.tool||span.name}</code></p>{span.model&&<p>{span.model}{span.totalTokens!=null?` · ${span.totalTokens.toLocaleString()} tokens`:''}</p>}</div><span className="journey-event-status" data-error={failed}>{failed?'Recorded error':'Recorded'}</span></div>;
 }
 
 export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTelemetry}:JourneyProps){
@@ -45,7 +45,7 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
  const {workflow,workflowError}=useMemo(()=>{try{return {workflow:parseWorkflow(job?.workflow,job?.traceId),workflowError:''}}catch(e){return {workflow:null,workflowError:(e as Error).message}}},[job]);
  const traceId=workflow?.traceId||job?.traceId||'',answer=workflowError?'':workflowAnswer(workflow,job?.answer);
  const [traceNotice,setTraceNotice]=useState(''),[traceLoading,setTraceLoading]=useState(false),[traceRefresh,setTraceRefresh]=useState(0),[traceReadAt,setTraceReadAt]=useState('');
- const matchedRun=useMemo(()=>data?.runs.find(r=>r.id===job?.runId)||data?.runs.find(r=>r.events.some(e=>e.trace_id===traceId)),[data,job?.runId,traceId]);
+ const matchedRun=useMemo(()=>matchConversationRun(data?.runs||[],job?.runId,traceId),[data,job?.runId,traceId]);
 
  useEffect(()=>{
   const controller=new AbortController();
@@ -93,8 +93,8 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
   }catch(e){setError((e as Error).message)}finally{setLaunching(false);busy.current=false}
  }
  const visible=spans.filter(s=>s.traceId===traceId);
- const toolSpans=visible.filter(s=>s.operation==='execute_tool'||s.tool);
- const modelSpans=visible.filter(s=>!s.tool&&s.operation!=='execute_tool'&&(s.model||s.operation==='chat'));
+ const toolSpans=visible.filter(s=>spanType(s)==='Tool call');
+ const modelSpans=visible.filter(s=>spanType(s)==='Model request');
 
  return <section className="judge-journey judge-chat-shell">
   <aside className="chat-history">
@@ -132,13 +132,20 @@ export function JudgeJourney({data,onRefresh,onOpenRun,onOpenControls,onOpenTele
 }
 
 function TraceControls({spans,selected,onSelected,run,job,workflow,traceNotice,onOpenRun,onOpenControls,onOpenTelemetry}:{spans:CloudSpan[];selected:string;onSelected:(id:string)=>void;run?:AssuranceRun;job?:Job;workflow:AgentWorkflow|null;traceNotice:string;onOpenRun:(id:string)=>void;onOpenControls:(id:string)=>void;onOpenTelemetry:(id:string)=>void}){
- const chosen=spans.find(s=>s.spanId===selected)??spans[0],controls=[['7','Event recording',workflow?undefined:run?.c7],['16','Spend cap',workflow?undefined:run?.c16],['9','Performance drift',workflow?undefined:run?.c9]] as const;
+ const chosen=spans.find(s=>s.spanId===selected)??spans[0],traceId=workflow?.traceId||job?.traceId;
+ const controls=conversationControls(run,traceId),references=conversationReferences(run,traceId),duration=elapsedSeconds(job?.startedAt,job?.finishedAt);
+ const finalFinding=workflow?.findings.find(f=>f.stage==='customer:response')||workflow?.findings.at(-1);
+ const failures=run?.workflow.failures.length;
  return <div className="journey-trace-layout">
   <div>{workflow&&<WorkflowActivity workflow={workflow} journey={job?.journey}/>}<SpanWaterfall spans={spans} selected={chosen?.spanId} onSelect={onSelected}/><section className="wa-panel journey-trajectory"><header><h2>Multi-agent trajectory</h2><span>Tool and delegation evidence</span></header><div className="trajectory-flow">{workflow?workflow.stages.filter(s=>s.invoked).map(s=><span key={s.stage}>{stageNames[s.stage]} · {stageState(s,workflow)}</span>):spans.length?Array.from(new Set(spans.map(actorFor))).map(actor=><span key={actor}>{actor}</span>):<span>Waiting for trace-linked agent activity</span>}</div><footer>{spans.length} spans loaded for this conversation. {traceNotice}</footer></section></div>
   <aside>
-   <section className="wa-panel journey-span-detail"><header><h2>Selected span</h2><span>{chosen?.service}</span></header>{chosen&&<dl>{Object.entries({'Operation':chosen.name,'Trace ID':chosen.traceId,'Span ID':chosen.spanId,'Parent':chosen.parentSpanId,'Duration':`${chosen.durationMs.toFixed(1)} ms`,'Tool':chosen.tool,'Model':chosen.model,'Input tokens':chosen.inputTokens,'Output tokens':chosen.outputTokens,'Tokens':chosen.totalTokens,'Status':chosen.status,'HTTP status':chosen.httpStatus}).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{display(v)}</dd></div>)}</dl>}</section>
-   <section className="wa-panel journey-controls"><header><h2>Control evidence</h2><span>{run?.id||'No collected run match'}</span></header>{controls.map(([id,name,result])=><div key={id}><span><b>C{id}</b><small>{name}</small></span><em className={`wa-badge ${verdictClass(result?.verdict)}`}>{verdict(result?.verdict)}</em></div>)}{workflow?<Alert severity="info">This workflow has not been assessed for C7, C16 or C9. Runtime recording and spend protections are separate from combined control verdicts.</Alert>:run?<div className="journey-control-actions"><Button onClick={()=>onOpenControls(run.id)}>Inspect controls</Button><Button onClick={()=>onOpenTelemetry(run.id)}>Open trace explorer</Button></div>:<Alert severity="info">No collected control record is linked to this conversation in the current evidence response.</Alert>}</section>
-   <section className="wa-panel journey-outcome"><header><h2>Finding & outcome</h2><span>Judge close-out</span></header><p><b>Workflow:</b> {workflow?.outcome?outcomeNames[workflow.outcome]:run?workflowStatus(run):'Awaiting linked run evidence.'}</p><p><b>ServiceNow:</b> {run&&[run.c7,run.c16,run.c9].some(x=>['BREACH','NOT SATISFIED'].includes(String(x?.verdict)))?'A failed control needs a matching finding reference.':'No verified run-to-finding link is available.'}</p><p><b>Business outcome:</b> Investigation evidence is available; time saved and prevented loss still require a measured baseline.</p><div className="journey-control-actions">{run&&<Button onClick={()=>onOpenRun(run.id)}>Open run evidence</Button>}<Button component="a" href={workshopLinks.servicenow} target="_blank" rel="noopener noreferrer">Open Team Alpha ServiceNow ↗</Button></div></section>
+   <section className="wa-panel journey-span-detail"><header><h2>Selected span</h2><span>{chosen?.service}</span></header>{chosen?<><dl>{Object.entries(spanDetails(chosen)).map(([k,v])=><div key={k}><dt>{k}</dt><dd>{display(v)}</dd></div>)}</dl><p className="chat-evidence-note">Fields describe this span only. Select a model request for model usage or a tool-call span for its tool name. UNSET is not a failure verdict.</p></>:<p className="chat-evidence-note">No span is available to inspect.</p>}</section>
+   <section className="wa-panel journey-controls"><header><h2>Control evidence</h2><span>{run?.id||'No collected run match'}</span></header>{controls.map(c=><div key={c.id} className="chat-control-result"><span><b>C{c.id}</b><small>{c.name}</small><small>{c.detail}</small></span><em className={`wa-badge ${verdictClass(c.verdict)}`}>{c.verdict}</em></div>)}<p className="chat-evidence-note">{controls.some(c=>c.assessed)?'Showing recorded assessment results from the linked run; these are separate from workflow completion.':'Not assessed means no matching assessment result is available. It is neither a pass nor a failure. Refresh evidence retrieves results; it does not run assessments.'}</p>{run&&<div className="journey-control-actions"><Button onClick={()=>onOpenControls(run.id)}>Inspect controls</Button><Button onClick={()=>onOpenTelemetry(run.id)}>Open trace explorer</Button></div>}</section>
+   <section className="wa-panel journey-outcome"><header><h2>Finding & outcome</h2><span>Evidence for this conversation</span></header><p><b>Workflow:</b> {workflow?.outcome?outcomeNames[workflow.outcome]:run?workflowStatus(run):job?.state||'No workflow status recorded'}{duration!=null&&` · ${duration.toFixed(1)} s elapsed`}</p>{workflow?.outcome==='answered'&&<p>The agent produced a response. Service restoration is not established by this status.</p>}{failures!=null&&<p><b>Recorded request failures:</b> {failures}{failures>0?' — review run evidence for failed attempts, including retries.':' in the collected workflow record.'}</p>}
+    {finalFinding&&<details className="chat-outcome-details"><summary>Reported findings & next steps</summary>{([['Findings',finalFinding.findings],['Unresolved questions',finalFinding.unresolved_issues],['Limitations',finalFinding.limitations],['Next steps',finalFinding.recommended_next_steps]] as const).map(([label,items])=>items.length>0&&<div key={label}><b>{label}</b><ul>{items.map((item,i)=><li key={i}>{item}</li>)}</ul></div>)}<small>Agent-reported findings; external resolution is not independently verified.</small></details>}
+    <p><b>ServiceNow / finding references:</b> {references.length?`${references.length} recorded reference(s) in this run. External record state has not been verified.`:run?'No finding ID or ServiceNow record reference was supplied in this run’s evidence.':'Run evidence is unavailable; finding linkage cannot be checked.'}</p>{references.length>0&&<ul className="chat-outcome-references">{references.map((ref,i)=><li key={i}>{ref.number&&<>ServiceNow: <code>{ref.number}</code> </>}{ref.sysId&&<>Record ID: <code>{ref.sysId}</code> </>}{ref.finding&&<>Finding: <code>{ref.finding}</code> </>}{ref.receipt&&<>Receipt: <code>{ref.receipt}</code> </>}<small>Source: {ref.source}</small></li>)}</ul>}
+    <p><b>Measured business impact:</b> Not available in the current evidence. Elapsed runtime is shown above when recorded; time saved and avoided loss are not calculated.</p><div className="journey-control-actions">{run&&<Button onClick={()=>onOpenRun(run.id)}>Open run evidence</Button>}<Button component="a" href={workshopLinks.servicenow} target="_blank" rel="noopener noreferrer">Open ServiceNow workspace ↗</Button></div>
+   </section>
   </aside>
  </div>;
 }

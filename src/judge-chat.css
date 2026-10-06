@@ -57,3 +57,8 @@ html .wa-app .wa-main:has(.judge-chat-shell){padding:0;background:var(--surface)
 .chat-trace-status>div{display:grid;gap:4px;min-width:0}.chat-trace-status strong{font-size:12px}.chat-trace-status small{font-size:11px;color:var(--muted);line-height:1.5}.chat-trace-status button{flex-shrink:0}
 .journey-event-status{font-size:11px;color:var(--muted)}.journey-event-status[data-error=true]{color:var(--status-breach,#e26b65)}
 @media(max-width:600px){.chat-trace-status{padding:12px;align-items:flex-start;flex-direction:column;gap:8px}}
+
+.chat-evidence-note{padding:0 20px 16px;color:var(--muted);font-size:12px;line-height:1.7}
+.journey-controls .chat-control-result{align-items:flex-start;gap:14px}.journey-controls .chat-control-result>span{display:flex;flex-wrap:wrap;gap:8px;min-width:0}.journey-controls .chat-control-result>span>small:last-child{flex-basis:100%;line-height:1.6}.chat-control-result em{flex-shrink:0}
+.chat-outcome-details,.chat-outcome-references{margin:16px 20px;font-size:12px;line-height:1.7}.chat-outcome-details summary{cursor:pointer;font-weight:600}.chat-outcome-details ul{padding-left:18px}.chat-outcome-references{padding-left:18px;overflow-wrap:anywhere}.chat-outcome-references small{display:block;color:var(--muted)}
+.chat-inspector .journey-trace-layout>aside{grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr))}.chat-inspector .journey-outcome{grid-column:1/-1}
