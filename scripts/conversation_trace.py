@@ -46,18 +46,50 @@ def normalize(row, trace, region):
                   kind=str(summary.get('kind') or ''), startTime=iso(start), endTime=iso(end),
                   durationMs=(end-start)*1000, region=region,
                   sourceUrl=f'https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}#/gen-ai-observability/spans?traceId={trace}')
-    for key in ('parentSpanId', 'status', 'service', 'model', 'httpStatus'):
-        if summary.get(key) is not None:
-            result[key] = summary[key]
-    result['logGroup'] = row.get('source', {}).get('logGroup', '')
     attrs = native.get('attributes', {})
-    for key, choices in {'tool': ('gen_ai.tool.name', 'tool.name'), 'operation': ('gen_ai.operation.name',)}.items():
-        for attr in choices:
-            if isinstance(attrs.get(attr), str):
-                result[key] = attrs[attr]
+    resource = native.get('resource', {}).get('attributes', {})
+    def attribute(*keys):
+        return next((attrs[k] for k in keys if attrs.get(k) is not None), None)
+    fields = {
+        'parentSpanId': summary.get('parentSpanId') or native.get('parentSpanId'),
+        'status': summary.get('status'),
+        'service': summary.get('service') or attribute('aws.local.service', 'service.name') or resource.get('service.name'),
+        'agent': attribute('gen_ai.agent.name') or summary.get('agent'),
+        'model': summary.get('model') or attribute('gen_ai.response.model', 'gen_ai.request.model'),
+        'httpStatus': summary.get('httpStatus') or attribute('http.response.status_code', 'http.status_code'),
+        'tool': attribute('gen_ai.tool.name', 'tool.name'),
+        'toolCallId': attribute('gen_ai.tool.call.id', 'tool.call.id'),
+        'operation': attribute('gen_ai.operation.name'),
+        'spanKind': attribute('aws.span.kind'),
+        'system': attribute('gen_ai.system', 'gen_ai.provider.name'),
+        'mcpMethod': attribute('mcp.method.name'),
+        'sessionId': attribute('session.id', 'gen_ai.conversation.id'),
+        'runId': summary.get('runId'),
+        'actionId': summary.get('actionId'),
+        'errorType': attribute('error.type'),
+    }
+    if not fields['operation']:
+        name = result['name']
+        for operation in ('invoke_agent', 'execute_event_loop_cycle', 'chat', 'execute_tool'):
+            if name == operation or name.startswith(operation + ' '):
+                fields['operation'] = operation
                 break
-    for source, dest in (('input', 'inputTokens'), ('output', 'outputTokens'), ('total', 'totalTokens')):
+    for key, value in fields.items():
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            result[key] = value
+    result['logGroup'] = row.get('source', {}).get('logGroup', '')
+    result['logStream'] = row.get('source', {}).get('logStream', '')
+    aliases = {
+        'inputTokens': ('input', ('gen_ai.usage.input_tokens', 'gen_ai.usage.prompt_tokens')),
+        'outputTokens': ('output', ('gen_ai.usage.output_tokens', 'gen_ai.usage.completion_tokens')),
+        'totalTokens': ('total', ('gen_ai.usage.total_tokens',)),
+        'cacheReadTokens': ('cacheRead', ('gen_ai.usage.cache_read_input_tokens',)),
+        'cacheWriteTokens': ('cacheWrite', ('gen_ai.usage.cache_write_input_tokens',)),
+    }
+    for dest, (source, keys) in aliases.items():
         value = summary.get('tokens', {}).get(source)
+        if value is None:
+            value = attribute(*keys)
         if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
             result[dest] = value
     return result
@@ -75,11 +107,12 @@ def collect(query, target='http://127.0.0.1:10196', fetch=None):
     fetch = fetch or get
     sources = fetch('/api/sources')
     region = sources.get('region', 'us-east-1')
-    rows, errors, groups = {}, [], []
+    rows, errors, groups, source_counts = {}, [], [], []
     deadline = time.monotonic() + 22
     for source in sources['sources']:
         groups.append(source['logGroup'])
         cursor = None
+        source_ids = set()
         for page in range(4):
             if time.monotonic() >= deadline:
                 errors.append(dict(logGroup=source['logGroup'], error='Trace query time limit reached'))
@@ -92,7 +125,8 @@ def collect(query, target='http://127.0.0.1:10196', fetch=None):
                 for row in data['spans']:
                     try:
                         span = normalize(row, trace, region)
-                        rows[span['spanId']] = span
+                        source_ids.add(span['spanId'])
+                        rows[span['spanId']] = {**rows.get(span['spanId'], {}), **span}
                     except (ValueError, TypeError, KeyError, OverflowError):
                         errors.append(dict(logGroup=source['logGroup'], error='Invalid span metadata omitted'))
                 next_cursor = data.get('nextCursor')
@@ -107,8 +141,9 @@ def collect(query, target='http://127.0.0.1:10196', fetch=None):
             except Exception:
                 errors.append(dict(logGroup=source['logGroup'], error='Configured span source is unavailable'))
                 break
-    coverage = 'Source coverage: ' + ', '.join(dict.fromkeys(groups)) + '. Only configured sources are included; other runtime spans may be absent.'
+        source_counts.append(dict(id=source['id'], logGroup=source['logGroup'], logStream=source.get('logStream', ''), spans=len(source_ids)))
+    coverage = 'Configured source coverage: ' + ', '.join(f"{s['id']} ({s['spans']} spans)" for s in source_counts) + '. Counts may overlap across sources.'
     return dict(schema=1, source='AWS CloudWatch API', complete=not errors, errors=errors,
                 capturedAt=dt.datetime.now(dt.timezone.utc).isoformat(), region=region,
                 coverage=coverage, omitted='Prompts, tool payloads, raw attributes and log messages excluded.',
-                spans=sorted(rows.values(), key=lambda s: s['startTime']), metrics=[], logs=[])
+                sources=source_counts, spans=sorted(rows.values(), key=lambda s: s['startTime']), metrics=[], logs=[])

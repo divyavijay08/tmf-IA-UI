@@ -129,3 +129,38 @@ checkout is absent; `test:workflow` requires it and fails without it. This port 
 tested against the exact `fd81a40` source snapshot. It does not deploy agent images
 or prove live model compliance with the tool-loop and JSON-schema safeguards.
 No running services are changed by this repository synchronization.
+
+### Complete conversation trace sources
+
+The span API must include runtime sources as well as the gateway. For the current
+`alpha_wf4` deployment, the VM's
+`/home/ec2-user/environment/assurance-ui-live/span-sources.json` configures
+`aws/spans` / `default` plus the Customer, IT and Network runtime log groups,
+each with the `spans` stream. The existing API runs on loopback port 10196 using:
+
+```sh
+python3 -u span_api_test.py serve --region us-east-1 \
+  --sources-file /home/ec2-user/environment/assurance-ui-live/span-sources.json \
+  --port 10196
+```
+
+Keep that source configuration when restarting the span API; starting it with
+only `--log-group aws/spans --log-stream default` omits runtime agent spans.
+Update the allowlisted runtime groups when agent versions change. No agent
+images or chat execution settings need changing. Only the selected conversation's
+trace and time window are requested. Source failures and scan limits remain
+visible; source counts may overlap and spans are deduplicated by span ID.
+
+The browser distinguishes agent invocations, agent cycles, model requests, MCP
+requests and tool calls. The usage summary counts model-call leaf spans and
+excludes repeated parent agent/cycle and ancestor gateway usage. It never adds
+all token-bearing spans together. Selected-span usage remains visible separately.
+Span metadata, source identity and token counters are exposed; raw prompts,
+message bodies and tool payloads are not. Telemetry provides measurements for the
+control panel, not an automatic C7/C16/C9 assessment verdict.
+
+The chat trace explorer provides Tree/Timeline views and a clickable trajectory
+based on recorded parent span IDs. Clicking a row, duration, timeline bar or
+trajectory node updates the adjacent Form/JSON metadata inspector. Missing
+parents remain detached; timing similarity never invents an edge. Category
+filters do not change the underlying trace or assessment evidence.

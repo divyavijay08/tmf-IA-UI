@@ -45,3 +45,27 @@ class ProxyBoundaryTests(unittest.TestCase):
   sent=[];handler._send=lambda code,body:sent.append(code)
   with patch('judge_server.urllib.request.urlopen',return_value=io.BytesIO(json.dumps({'executions':[{'traceId':'b'*32}]}).encode())),patch('judge_server.collect_trace') as upstream:
    handler.do_GET();upstream.assert_not_called();self.assertEqual(sent,[404])
+
+class RuntimeMetadataTests(unittest.TestCase):
+ def test_agent_token_aliases_and_metadata_exclude_payloads(self):
+  from conversation_trace import normalize
+  r=row();r['summary'].update(name='invoke_agent Strands Agents',tokens={});r['span']['attributes'].pop('gen_ai.operation.name')
+  r['source']['logStream']='spans'
+  r['span']['attributes'].update({'aws.local.service':'alpha_customer.DEFAULT','gen_ai.agent.name':'Strands Agents','gen_ai.request.model':'nemotron-super-120b','gen_ai.usage.prompt_tokens':1099,'gen_ai.usage.completion_tokens':731,'gen_ai.usage.total_tokens':1830,'gen_ai.usage.cache_write_input_tokens':0,'gen_ai.input.messages':'SECRET PROMPT','aws.span.kind':'AGENT'})
+  s=normalize(r,TRACE,'us-east-1')
+  self.assertEqual((s['agent'],s['model'],s['operation']),('Strands Agents','nemotron-super-120b','invoke_agent'))
+  self.assertEqual((s['inputTokens'],s['outputTokens'],s['totalTokens'],s['cacheWriteTokens']),(1099,731,1830,0))
+  self.assertEqual(s['logStream'],'spans');self.assertNotIn('SECRET',str(s));self.assertNotIn('attributes',s)
+ def test_reads_all_configured_runtime_sources_and_reports_counts(self):
+  sources=[dict(id=str(i),logGroup='runtime'+str(i),logStream='spans') for i in range(4)]
+  def fetch(path,args=None):
+   if path=='/api/sources':return dict(sources=sources)
+   r=row(str(int(args['source'])+1)*16);r['source']=sources[int(args['source'])];return dict(spans=[r])
+  result=collect(QUERY,fetch=fetch)
+  self.assertEqual(len(result['spans']),4);self.assertEqual([s['spans'] for s in result['sources']],[1,1,1,1]);self.assertTrue(result['complete'])
+ def test_runtime_source_failure_preserves_other_sources_without_claiming_complete(self):
+  def fetch(path,args=None):
+   if path=='/api/sources':return dict(sources=[dict(id='g',logGroup='gateway'),dict(id='a',logGroup='agent')])
+   if args['source']=='a':raise TimeoutError()
+   return dict(spans=[row()])
+  result=collect(QUERY,fetch=fetch);self.assertEqual(len(result['spans']),1);self.assertFalse(result['complete']);self.assertEqual(result['errors'][0]['logGroup'],'agent')

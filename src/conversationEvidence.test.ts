@@ -31,3 +31,18 @@ test('finding references require explicit fields and reject cross-run or cross-t
 test('runtime duration is based on valid recorded timestamps, not a savings estimate',()=>{
  assert.equal(elapsedSeconds('2026-10-06T06:00:00Z','2026-10-06T06:00:05Z'),5);assert.equal(elapsedSeconds(undefined,'2026-10-06T06:00:05Z'),null);assert.equal(elapsedSeconds('2026-10-06T06:00:06Z','2026-10-06T06:00:05Z'),null);
 });
+
+test('agent and cycle usage is not mislabeled as additional model requests',()=>{
+ assert.equal(spanType({...span,name:'invoke_agent Strands Agents',model:'m',inputTokens:12}),'Agent invocation');
+ assert.equal(spanType({...span,name:'execute_event_loop_cycle',inputTokens:12}),'Agent cycle');
+ assert.equal(spanType({...span,name:'mcp tools/list',mcpMethod:'tools/list'}),'MCP request');
+});
+test('trace usage excludes parent and duplicate gateway model accounting',async()=>{
+ const {traceUsage}=await import('./conversationEvidence.ts');
+ const agent={...span,spanId:'1'.repeat(16),operation:'invoke_agent',inputTokens:100,outputTokens:20};
+ const chat={...span,spanId:'2'.repeat(16),parentSpanId:agent.spanId,operation:'chat',inputTokens:100,outputTokens:20};
+ const http={...span,spanId:'3'.repeat(16),parentSpanId:chat.spanId};
+ const gateway={...span,spanId:'4'.repeat(16),parentSpanId:http.spanId,operation:'chat',inputTokens:100,outputTokens:20};
+ const result=traceUsage([agent,chat,http,gateway]);assert.equal(result.calls,1);assert.equal(result.input,100);assert.equal(result.output,20);
+ const missing=traceUsage([{...chat,inputTokens:undefined,outputTokens:undefined}]);assert.equal(missing.input,null);assert.equal(missing.output,null);
+});
